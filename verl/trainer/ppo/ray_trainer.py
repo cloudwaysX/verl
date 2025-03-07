@@ -16,14 +16,18 @@ FSDP PPO Trainer with Ray-based single controller.
 This trainer supports model-agonistic model initialization with huggingface
 """
 
+from collections import defaultdict
 import os
 import uuid
+import hashlib # for hashing the prompt
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from pprint import pprint
 from typing import Type, Dict
 from copy import deepcopy
+import json
+
 
 import numpy as np
 from codetiming import Timer
@@ -95,6 +99,7 @@ class ResourcePoolManager:
 
 import torch
 from verl.utils.torch_functional import masked_mean
+import wandb
 
 
 def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, kl_penalty='kl'):
@@ -128,11 +133,30 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
 
     return data, metrics
 
+def compute_batch_estimated_baseline_variance_weighted(data: DataProto):
+    # Get the baseline rewards lists and sample indices from the non-tensor part
+    ref_rewards_list = data.non_tensor_batch.get("baseline_ref_rewards", None)
+    if ref_rewards_list is None:
+        raise ValueError("Batch must contain 'baseline_ref_rewards'")
 
-def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_repeat=1):
+    # Compute weights per rollout (each row in the batch)
+    # we need to compute the probs for those baseline
+
+    # weights = torch.exp(data.batch['log_probs'] - data.batch['ref_log_prob']).detach()  # shape: (batch_size,)
+    
+
+    # TODO
+
+
+
+
+
+
+def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_repeat=1, return_std=False):
     # prepare response group
     # TODO: add other ways to estimate advantages
     if adv_estimator == AdvantageEstimator.GAE:
+        assert not return_std, 'return_std is not supported in GAE'
         values = data.batch['values']
         responses = data.batch['responses']
         response_length = responses.size(-1)
@@ -155,10 +179,18 @@ def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_re
         response_mask = attention_mask[:, -response_length:]
         advantages, returns = core_algos.compute_grpo_outcome_advantage(token_level_rewards=token_level_rewards,
                                                                         eos_mask=response_mask,
-                                                                        index=index)
+                                                                        index=index,
+                                                                        return_std=return_std)
+        if return_std:
+            advantages, rewards_std, rewards_mean = \
+                advantages["advantages"], advantages["rewards_std"], advantages["rewards_mean"]
         data.batch['advantages'] = advantages
         data.batch['returns'] = returns
+        if return_std:
+            data.batch['rewards_std'] = rewards_std
+            data.batch['rewards_mean'] = rewards_mean
     elif adv_estimator == AdvantageEstimator.REINFORCE_PLUS_PLUS:
+        assert not return_std, 'return_std is not supported in REINFORCE_PLUS_PLUS'
         token_level_rewards = data.batch['token_level_rewards']
         responses = data.batch['responses']
         response_length = responses.size(-1)
@@ -169,6 +201,7 @@ def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_re
         data.batch['advantages'] = advantages
         data.batch['returns'] = returns
     elif adv_estimator == AdvantageEstimator.REMAX:
+        assert not return_std, 'return_std is not supported in REMAX'
         token_level_rewards = data.batch['token_level_rewards']
         index = data.non_tensor_batch['uid']
         responses = data.batch['responses']
@@ -185,6 +218,7 @@ def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_re
         data.batch['advantages'] = advantages
         data.batch['returns'] = returns
     elif adv_estimator == AdvantageEstimator.RLOO:
+        assert not return_std, 'return_std is not supported in RLOO'
         token_level_rewards = data.batch['token_level_rewards']
         index = data.non_tensor_batch['uid']
         responses = data.batch['responses']
@@ -406,6 +440,9 @@ class RayPPOTrainer(object):
         self._validate_config()
         self._create_dataloader()
 
+        # Track variance
+        self.return_rewards_std = True
+
     def _validate_config(self):
         config = self.config
         # number of GPUs total
@@ -555,6 +592,7 @@ class RayPPOTrainer(object):
         with open_dict(self.config):
             self.config.actor_rollout_ref.actor.optim.total_training_steps = total_training_steps
             self.config.critic.optim.total_training_steps = total_training_steps
+
 
     def _maybe_log_val_generations_to_wandb(self, inputs, outputs, scores):
         """Log a table of validation samples to wandb"""
@@ -874,6 +912,7 @@ class RayPPOTrainer(object):
                           config=OmegaConf.to_container(self.config, resolve=True))
 
         self.global_steps = 0
+        culmul_time = 0
 
         # load checkpoint before doing anything
         self._load_checkpoint()
@@ -887,15 +926,53 @@ class RayPPOTrainer(object):
             if self.config.trainer.get('val_only', False):
                 return
 
-        # we start from step 1
-        self.global_steps += 1
+
+
+        # Add a random sampled subset of the training dataset and track their variance
+        num_tracked_samples = 200
+        self.tracked_samples_idx = np.random.choice(self.train_dataset.get_all_prompt_ids(), num_tracked_samples, replace=False)
+        if self.return_rewards_std:
+            n_epochs = self.config.trainer.total_epochs
+            # Initialize with zeros for all epochs
+            self.tracked_variances = { 
+                idx: [None] * n_epochs for idx in self.tracked_samples_idx 
+            }
+            self.tracked_rewards_mean = {
+                idx: [None] * n_epochs for idx in self.tracked_samples_idx
+            }
+
+        # Recording the previous variance
+        prev_variance = {}
+        for idx in self.train_dataset.get_all_prompt_ids():
+            prev_variance[idx] = 0.25
 
         for epoch in range(self.config.trainer.total_epochs):
-            for batch_dict in self.train_dataloader:
+            for batch_idx, batch_dict in enumerate(self.train_dataloader):
+                # we start from step 1
+                self.global_steps += 1
+
                 metrics = {}
                 timing_raw = {}
 
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
+
+                # Estimate the variance of the rewards for the tracked samples to decide if we need generation or not
+                # offpolicy_response = batch["offpolicy_response"]
+                # offpolicy_rewards = batch["offpolicy_rewards"]
+                # offpolicy_log_probs = batch["offpolicy_log_probs"]
+                # [TODO] These three should output a batch of lists, where the length of the list is rollouts.n
+                # now I want to extend the batch size into rollouts.n*original_batch_size where each sample has only one offpolicy response/reward/log_probs
+                index = batch.non_tensor_batch['index']
+                est_batch_var = 0
+                for idx in index:
+                    est_batch_var += prev_variance[idx]
+                est_batch_var /= len(index)
+                
+                if est_batch_var < 0.09:
+                    print(f"Skipping generation for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
+                    continue
+
+                print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
 
                 # pop those keys for generation
                 if 'multi_modal_inputs' in batch.non_tensor_batch.keys():
@@ -913,6 +990,7 @@ class RayPPOTrainer(object):
                     # generate a batch
                     with _timer('gen', timing_raw):
                         gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
+            
 
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
                         with _timer('gen_max', timing_raw):
@@ -930,8 +1008,11 @@ class RayPPOTrainer(object):
 
                             del gen_baseline_batch, gen_baseline_output
 
+
+
                     batch.non_tensor_batch['uid'] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))],
                                                              dtype=object)
+                    
                     # repeat to align with repeated responses in rollout
                     batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                     batch = batch.union(gen_batch_output)
@@ -974,6 +1055,8 @@ class RayPPOTrainer(object):
                         reward_tensor = self.reward_fn(batch)
                         batch.batch['token_level_scores'] = reward_tensor
 
+
+
                         # compute rewards. apply_kl_penalty if available
                         if not self.config.actor_rollout_ref.actor.get('use_kl_loss', False):
                             batch, kl_metrics = apply_kl_penalty(batch,
@@ -983,12 +1066,28 @@ class RayPPOTrainer(object):
                         else:
                             batch.batch['token_level_rewards'] = batch.batch['token_level_scores']
 
+                        # store the reward generated by reference model in order to estimate the variance later.
+                        # if epoch == 0: 
+                        #     print("Debug: the type and size of gen_batch_output is: ", type(gen_batch_output), len(gen_batch_output))
+                        #     for sample in batch:
+                        #         sample_id = sample.non_tensor_batch['index']
+                        #         reward_tensor = sample.batch['token_level_rewards']
+                        #         old_log_prob = sample.batch['old_log_probs']
+                        #         # Append the reward to the existing list stored in the dataset.
+                        #         self.train_dataset.dataframe.at[sample_id, 'offpolicy_rewards'].append(reward_tensor.item())
+                        #         self.train_dataset.dataframe.at[sample_id, 'offpolicy_log_probs'].append(old_log_prob.item())
+                        #         self.train_dataset.dataframe.at[sample_id, 'offpolicy_response'] = gen_batch_output
+                        #         exit()
+
+
                         # compute advantages, executed on the driver process
                         batch = compute_advantage(batch,
                                                   adv_estimator=self.config.algorithm.adv_estimator,
                                                   gamma=self.config.algorithm.gamma,
                                                   lam=self.config.algorithm.lam,
-                                                  num_repeat=self.config.actor_rollout_ref.rollout.n)
+                                                  num_repeat=self.config.actor_rollout_ref.rollout.n,
+                                                  return_std=self.return_rewards_std)
+                        
 
                     # update critic
                     if self.use_critic:
@@ -1017,14 +1116,49 @@ class RayPPOTrainer(object):
                         with _timer('save_checkpoint', timing_raw):
                             self._save_checkpoint()
 
+
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
 
+                # track the variance of the tracked samples
+                batch_indices = np.array(batch.non_tensor_batch['index'], dtype=object)
+                # Get unique indices and their first occurrence indices.
+                unique_ids, first_occurrence = np.unique(batch_indices, return_index=True)
+                # Assuming self.tracked_samples_idx is a set (or convert it to a set for O(1) lookups)
+                tracked_samples = set(self.tracked_samples_idx)
+                # Loop only over unique IDs that are tracked
+                for unique_id, i in zip(unique_ids, first_occurrence):
+                    variance = (batch.batch['rewards_std'][i]) ** 2
+                    prev_variance[unique_id] = variance
+                    if unique_id in tracked_samples:
+                        rewards_mean = batch.batch['rewards_mean'][i]
+                        # print(f"The rewards variance of the tracked sample at epoch {unique_id} is: {variance}")
+                        # Optionally, store it in a dictionary:
+                        self.tracked_variances[unique_id][epoch] = variance.item()
+                        self.tracked_rewards_mean[unique_id][epoch] = rewards_mean.item()
+
+         
+
                 # TODO: make a canonical logger that supports various backend
+                # [TOBEFIXED] wandb logger does not log the metrics correctly
+                culmul_time += timing_raw["step"]
+                metrics["timing_s/total"] = culmul_time
                 logger.log(data=metrics, step=self.global_steps)
 
-                self.global_steps += 1
+                if self.return_rewards_std:
+                    # Save the variance of the tracked samples to a file
+
+                    # Create a table with columns: uid, and one column per epoch.
+                    # Here we assume all lists have the same length, e.g., n epochs.
+                    n_epochs = self.config.trainer.total_epochs
+                    columns = ["idx"] + [f"epoch{i}_var" for i in range(n_epochs)] + [f"epoch{i}_meanR" for i in range(n_epochs)]
+                    table = wandb.Table(columns=columns)
+                    for idx, variances in self.tracked_variances.items():
+                        row = [idx] + variances + self.tracked_rewards_mean[idx]
+                        table.add_data(*row)
+                    wandb.log({"tracked_variances_table": table})
+
 
                 if self.global_steps >= self.total_training_steps:
 
@@ -1037,4 +1171,6 @@ class RayPPOTrainer(object):
                             (self.global_steps - 1) % self.config.trainer.save_freq != 0:
                         with _timer('save_checkpoint', timing_raw):
                             self._save_checkpoint()
+                    
                     return
+                

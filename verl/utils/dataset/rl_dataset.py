@@ -136,7 +136,13 @@ class RLHFDataset(Dataset):
             tokenizer.apply_chat_template(doc[prompt_key], add_generation_prompt=True)) <= self.max_prompt_length,
                                                              axis=1)]
 
-        print(f'filter dataset len: {len(self.dataframe)}')
+        # print(f'filter dataset len: {len(self.dataframe)}')
+        # print(f"[TEST only] select the first 512 samples for testing")
+        # self.dataframe = self.dataframe.head(512)
+
+        self.dataframe['offpolicy_rewards'] = [[] for _ in range(len(self.dataframe))]
+        self.dataframe['offpolicy_log_probs'] = [[] for _ in range(len(self.dataframe))]
+        self.dataframe['offpolicy_responses'] = [[] for _ in range(len(self.dataframe))]
 
     def resume_dataset_state(self):
         self.serialize_dataset = False if hasattr(self, 'original_parquet_files') else True
@@ -149,6 +155,29 @@ class RLHFDataset(Dataset):
 
     def __len__(self):
         return len(self.dataframe)
+    
+    def get_all_prompt_ids(self):
+        # If 'extra_info' exists in the DataFrame, try to extract the 'index' from it.
+        if 'extra_info' in self.dataframe.columns:
+            # Apply a function to extract the index from extra_info if present.
+            def extract_index(row):
+                # row is a pandas Series
+                extra = row.get('extra_info', {})
+                if isinstance(extra, dict) and 'index' in extra:
+                    return extra['index']
+                else:
+                    return None  # or you could return row.name as fallback
+
+            indices = self.dataframe.apply(extract_index, axis=1)
+            # If all rows have a valid index from extra_info, use them.
+            if indices.notnull().all() and indices.is_unique:
+                return indices.tolist()
+            else:
+                # Fallback: use the DataFrame's inherent index.
+                return self.dataframe.index.tolist()
+        else:
+            # Otherwise, just use the DataFrame's index.
+            return self.dataframe.index.tolist()
 
     def __getitem__(self, item):
         """
@@ -212,9 +241,17 @@ class RLHFDataset(Dataset):
         if self.return_raw_chat:
             row_dict['raw_prompt'] = chat.tolist()
 
-        # add index for each prompt
-        index = row_dict.get("extra_info", {}).get("index", 0)
-        row_dict["index"] = index
+        # Check if there is an index inside the extra_info field.
+        # If it exists, use it; otherwise, assign the DataFrame's index.
+        if "extra_info" in row_dict and "index" in row_dict["extra_info"]:
+            row_dict["index"] = row_dict["extra_info"]["index"]
+        else:
+            row_dict["index"] = self.dataframe.index[item]
+
+        # Add offpolicy data used for estimation
+        # row_dict['offpolicy_rewards'] = row_dict.get('offpolicy_rewards', [])
+        # row_dict['offpolicy_log_probs'] = row_dict.get('offpolicy_log_probs', [])
+        # row_dict['offpolicy_responses'] = row_dict.get('offpolicy_responses', [])
 
         return row_dict
 

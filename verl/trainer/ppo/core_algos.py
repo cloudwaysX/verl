@@ -111,7 +111,8 @@ def compute_gae_advantage_return(token_level_rewards: torch.Tensor, values: torc
 def compute_grpo_outcome_advantage(token_level_rewards: torch.Tensor,
                                    eos_mask: torch.Tensor,
                                    index: torch.Tensor,
-                                   epsilon: float = 1e-6):
+                                   epsilon: float = 1e-6,
+                                   return_std: bool = False):
     """
     Compute advantage for GRPO, operating only on Outcome reward 
     (with only one scalar reward for each response).
@@ -129,6 +130,8 @@ def compute_grpo_outcome_advantage(token_level_rewards: torch.Tensor,
     """
     response_length = token_level_rewards.shape[-1]
     scores = token_level_rewards.sum(dim=-1)
+    rewards_std = torch.zeros_like(scores)
+    rewards_mean_per_sample = torch.zeros_like(scores)
 
     id2score = defaultdict(list)
     id2mean = {}
@@ -149,9 +152,14 @@ def compute_grpo_outcome_advantage(token_level_rewards: torch.Tensor,
                 raise ValueError(f"no score in prompt index: {idx}")
         for i in range(bsz):
             scores[i] = (scores[i] - id2mean[index[i]]) / (id2std[index[i]] + epsilon)
+            rewards_std[i] = id2std[index[i]]
+            rewards_mean_per_sample[i] = id2mean[index[i]]
         scores = scores.unsqueeze(-1).tile([1, response_length]) * eos_mask
 
-    return scores, scores
+    if return_std:
+        return {"advantages": scores, "rewards_std": rewards_std, "rewards_mean": rewards_mean_per_sample}, scores
+    else:
+        return scores, scores
 
 
 def compute_rloo_outcome_advantage(token_level_rewards: torch.Tensor,
