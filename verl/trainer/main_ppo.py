@@ -18,11 +18,23 @@ from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 
 import ray
 import hydra
-
+from deepscaler.rewards.math_reward import deepscaler_reward_fn
 
 @hydra.main(config_path='config', config_name='ppo_trainer', version_base=None)
 def main(config):
-    run_ppo(config)
+    customized_compute_score = None
+    if config.reward_model.customized_reward_fn_name: 
+        if config.reward_model.customized_reward_fn_name == 'deepscaler':
+            customized_compute_score = deepscaler_reward_fn
+        else:
+            raise NotImplementedError
+    
+    if config.reward_model.customized_reward_fn_name:
+        print(f"Using customized reward function: {config.reward_model.customized_reward_fn_name}")
+    else:
+        print("No customized reward function is used. Using default reward function.")
+    
+    run_ppo(config, compute_score=customized_compute_score)
 
 
 def run_ppo(config, compute_score=None):

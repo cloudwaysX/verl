@@ -67,4 +67,5 @@ python3 -m verl.trainer.main_ppo \
     trainer.test_freq=20 \
     trainer.default_hdfs_dir=null \
     trainer.total_epochs=30 "${@:1}"\
+    reward_model.customized_reward_fn_name="deepscaler" \
     active_strategy.var_threshold=null

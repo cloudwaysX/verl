@@ -148,6 +148,7 @@ reward_model:
   use_dynamic_bsz: ${critic.use_dynamic_bsz}
   forward_max_token_len_per_gpu: ${critic.forward_max_token_len_per_gpu}
   reward_manager: naive
+  customized_reward_fn: null
 
 algorithm:
   gamma: 1.0
