@@ -26,7 +26,6 @@ fi
 
 # new added
 export CUDA_VISIBLE_DEVICES=1,2,3,4
-export HOME="/homes/gws/yifangc/"
 # wandb login 60d7928f56c42e5c8050d4ec50463845ee3ff2d5
 export WANDB_API_KEY=60d7928f56c42e5c8050d4ec50463845ee3ff2d5
 export WANDB_ENTITY=googleintern
@@ -34,8 +33,8 @@ export WANDB_ENTITY=googleintern
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_files=$HOME/verl/data/gsm8k/train.parquet \
-    data.val_files=$HOME/verl/data/gsm8k/test.parquet \
+    data.train_files=$HOME/data/gsm8k/train.parquet \
+    data.val_files=$HOME/data/gsm8k/test.parquet \
     data.train_batch_size=64 \
     data.val_batch_size=512 \
     data.max_prompt_length=512 \

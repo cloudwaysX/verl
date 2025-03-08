@@ -12,6 +12,9 @@ data:
   shuffle: True
   image_key: images
 
+active_strategy: 
+  var_threshold: None
+
 actor_rollout_ref:
   hybrid_engine: True
   model:
