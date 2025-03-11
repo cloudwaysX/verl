@@ -994,7 +994,7 @@ class RayPPOTrainer(object):
                 # Select the top 50% indices
                 if self.config.active_strategy.strategy_type and self.config.active_strategy.strategy_type == "greedy":
                     top_half_length = len(variance_list) // 2
-                    selected_indices = [idx for idx, var in variance_list[:top_half_size]]
+                    selected_indices = [idx for idx, var in variance_list[:top_half_length]]
 
                     # Update the batch to keep only selected top 50% indices
                     selected_indices = [i for i, idx in enumerate(index) if idx in set(idx for idx, _ in variance_list[:len(variance_list)//2])]
