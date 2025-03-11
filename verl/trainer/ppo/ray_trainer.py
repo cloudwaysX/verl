@@ -442,6 +442,8 @@ class RayPPOTrainer(object):
 
         # Track variance
         self.return_rewards_std = True
+        self.prev_variance = {}
+
 
     def _validate_config(self):
         config = self.config
@@ -900,7 +902,6 @@ class RayPPOTrainer(object):
             self.prev_variance = torch.load(prev_variance_path)
         else:
             print("No prev_variance checkpoint found. Starting fresh.")
-            self.prev_variance = {}
 
     def _balance_batch(self, batch: DataProto, metrics, logging_prefix='global_seqlen'):
         """Reorder the data on single controller such that each dp rank gets similar total tokens"""
