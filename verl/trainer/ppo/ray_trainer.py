@@ -972,7 +972,7 @@ class RayPPOTrainer(object):
                     print(f"Skipping generation for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
                     continue
 
-                # print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
+                print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
 
                 # pop those keys for generation
                 if 'multi_modal_inputs' in batch.non_tensor_batch.keys():
