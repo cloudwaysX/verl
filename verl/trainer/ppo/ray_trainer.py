@@ -1148,8 +1148,10 @@ class RayPPOTrainer(object):
                 # Assuming self.tracked_samples_idx is a set (or convert it to a set for O(1) lookups)
                 tracked_samples = set(self.tracked_samples_idx)
                 # Loop only over unique IDs that are tracked
+                var_est_error = 0
                 for unique_id, i in zip(unique_ids, first_occurrence):
                     variance = (batch.batch['rewards_std'][i]) ** 2
+                    var_est_error += np.absolute(variance-prev_variance[unique_id])/len(unique_ids)
                     prev_variance[unique_id] = variance
                     if unique_id in tracked_samples:
                         rewards_mean = batch.batch['rewards_mean'][i]
@@ -1159,11 +1161,7 @@ class RayPPOTrainer(object):
                         self.tracked_rewards_mean[unique_id][epoch] = rewards_mean.item()
 
          
-
-                # TODO: make a canonical logger that supports various backend
-                # [TOBEFIXED] wandb logger does not log the metrics correctly
-                culmul_time += timing_raw["step"]
-                metrics["timing_s/total"] = culmul_time
+                metrics["est_var_error"] = var_est_error
                 logger.log(data=metrics, step=self.global_steps)
 
                 if self.return_rewards_std:
