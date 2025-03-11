@@ -834,6 +834,14 @@ class RayPPOTrainer(object):
         with open(local_latest_checkpointed_iteration, 'w') as f:
             f.write(str(self.global_steps))
 
+        # Save prev_variance to file
+        prev_variance_path = os.path.join(
+            self.config.trainer.default_local_dir, 
+            f'global_step_{self.global_steps}', 
+            'prev_variance.pt'
+        )
+        torch.save(self.prev_variance, prev_variance_path)
+
     def _load_checkpoint(self):
         if self.config.trainer.resume_mode == 'disable':
             return 0
@@ -886,6 +894,13 @@ class RayPPOTrainer(object):
             self.train_dataloader.load_state_dict(dataloader_state_dict)
         else:
             print(f"Warning: No dataloader state found at {dataloader_local_path}, will start from scratch")
+
+        prev_variance_path = os.path.join(global_step_folder, 'prev_variance.pt')
+        if os.path.exists(prev_variance_path):
+            self.prev_variance = torch.load(prev_variance_path)
+        else:
+            print("No prev_variance checkpoint found. Starting fresh.")
+            self.prev_variance = {}
 
     def _balance_batch(self, batch: DataProto, metrics, logging_prefix='global_seqlen'):
         """Reorder the data on single controller such that each dp rank gets similar total tokens"""
@@ -949,9 +964,9 @@ class RayPPOTrainer(object):
             }
 
         # Recording the previous variance
-        prev_variance = {}
-        for idx in self.train_dataset.get_all_prompt_ids():
-            prev_variance[idx] = 0.25
+        if not self.prev_variance:
+            for idx in self.train_dataset.get_all_prompt_ids():
+                self.prev_variance[idx] = 0.25
 
         for epoch in range(self.config.trainer.total_epochs):
             for batch_idx, batch_dict in enumerate(self.train_dataloader):
@@ -970,7 +985,7 @@ class RayPPOTrainer(object):
                 # [TODO] These three should output a batch of lists, where the length of the list is rollouts.n
                 # now I want to extend the batch size into rollouts.n*original_batch_size where each sample has only one offpolicy response/reward/log_probs
                 index = batch.non_tensor_batch['index']
-                variance_list = [(idx, prev_variance[idx]) for idx in index]
+                variance_list = [(idx, self.prev_variance[idx]) for idx in index]
 
                 # Sort the indices by variance in descending order
                 variance_list.sort(key=lambda x: x[1], reverse=True)
@@ -1151,8 +1166,8 @@ class RayPPOTrainer(object):
                 var_est_error = 0
                 for unique_id, i in zip(unique_ids, first_occurrence):
                     variance = (batch.batch['rewards_std'][i]) ** 2
-                    var_est_error += np.absolute(variance-prev_variance[unique_id])/len(unique_ids)
-                    prev_variance[unique_id] = variance
+                    var_est_error += np.absolute(variance-self.prev_variance[unique_id])/len(unique_ids)
+                    self.prev_variance[unique_id] = variance
                     if unique_id in tracked_samples:
                         rewards_mean = batch.batch['rewards_mean'][i]
                         # print(f"The rewards variance of the tracked sample at epoch {unique_id} is: {variance}")
