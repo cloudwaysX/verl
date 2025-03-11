@@ -14,6 +14,7 @@ data:
 
 active_strategy: 
   var_threshold: None
+  strategy_type: None
 
 actor_rollout_ref:
   hybrid_engine: True
