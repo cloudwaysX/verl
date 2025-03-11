@@ -24,7 +24,7 @@ if [ -z "$MODEL_PATH" ]; then
 fi
 
 PROJECT_NAME='deepscaler'
-EXPERIMENT_NAME='deepscaler-1.5b-2k_0.07' 
+EXPERIMENT_NAME='deepscaler-1.5b-2k_greedy' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
@@ -72,4 +72,5 @@ python3 -m verl.trainer.main_ppo \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
     trainer.total_epochs=30 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
-    active_strategy.var_threshold=0.07
+    active_strategy.var_threshold=0.07 \
+    active_strategy.strategy_type="greedy" 

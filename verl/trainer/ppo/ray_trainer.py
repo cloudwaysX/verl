@@ -546,8 +546,15 @@ class RayPPOTrainer(object):
         else:
             sampler = SequentialSampler(data_source=self.train_dataset)
 
+
+        if self.config.active_strategy.strategy_type and self.config.active_strategy.strategy_type=="greedy":
+            batch_size = self.config.data.train_batch_size * 2
+            self.config.active_strategy.var_threshold=None
+            print(f"Ignoring the variance threshold when setting active strategy to greedy")
+        else:
+            batch_size = self.config.data.train_batch_size
         self.train_dataloader = StatefulDataLoader(dataset=self.train_dataset,
-                                                   batch_size=self.config.data.train_batch_size,
+                                                   batch_size=batch_size,
                                                    num_workers=8,
                                                    drop_last=True,
                                                    collate_fn=collate_fn,
@@ -963,10 +970,23 @@ class RayPPOTrainer(object):
                 # [TODO] These three should output a batch of lists, where the length of the list is rollouts.n
                 # now I want to extend the batch size into rollouts.n*original_batch_size where each sample has only one offpolicy response/reward/log_probs
                 index = batch.non_tensor_batch['index']
-                est_batch_var = 0
-                for idx in index:
-                    est_batch_var += prev_variance[idx]
-                est_batch_var /= len(index)
+                variance_list = [(idx, prev_variance[idx]) for idx in index]
+
+                # Sort the indices by variance in descending order
+                variance_list.sort(key=lambda x: x[1], reverse=True)
+
+                # Select the top 50% indices
+                if self.config.active_strategy.strategy_type and self.config.active_strategy.strategy_type == "greedy":
+                    top_half_length = len(variance_list) // 2
+                    selected_indices = [idx for idx, var in variance_list[:top_half_size]]
+
+                    # Update the batch to keep only selected top 50% indices
+                    selected_indices = [i for i, idx in enumerate(index) if idx in set(idx for idx, _ in variance_list[:len(variance_list)//2])]
+                    batch.reorder(torch.tensor(selected_indices))
+                    est_batch_var = np.mean([var for _, var in variance_list[:len(variance_list)//2]])
+                    print("Greedily select the 50%.")
+                else:
+                    est_batch_var = np.mean([var for _, var in variance_list])
                 
                 if self.config.active_strategy.var_threshold and est_batch_var < self.config.active_strategy.var_threshold:
                     print(f"Skipping generation for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
