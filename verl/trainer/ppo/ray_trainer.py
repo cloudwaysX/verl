@@ -1167,10 +1167,12 @@ class RayPPOTrainer(object):
                 tracked_samples = set(self.tracked_samples_idx)
                 # Loop only over unique IDs that are tracked
                 var_est_error, var_est_error_ratio = 0, 0
+                total_var = 0
                 for unique_id, i in zip(unique_ids, first_occurrence):
                     variance = (batch.batch['rewards_std'][i]) ** 2
                     var_est_error += np.absolute(variance-self.prev_variance[unique_id])/len(unique_ids)
                     var_est_error_ratio +=var_est_error/variance
+                    total_var += variance/len(unique_ids)
                     self.prev_variance[unique_id] = variance
                     if unique_id in tracked_samples:
                         rewards_mean = batch.batch['rewards_mean'][i]
@@ -1181,7 +1183,11 @@ class RayPPOTrainer(object):
 
          
         
-                metrics.update({"est_var_error/mean": var_est_error,"est_var_error/ratio":var_est_error_ratio})
+                metrics.update({
+                    "est_var_error/mean": var_est_error,
+                    "est_var_error/ratio_sep":var_est_error_ratio,
+                    "est_vat_error/ratio": var_est_error/total_var
+                    })
                 logger.log(data=metrics, step=self.global_steps)
 
                 if self.return_rewards_std:
