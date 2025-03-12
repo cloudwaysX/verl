@@ -120,7 +120,7 @@ class RLHFDataset(Dataset):
         for i, parquet_file in enumerate(parquet_files):
             self.parquet_files[i] = copy_to_local(src=parquet_file, cache_dir=self.cache_dir)
 
-    def _read_files_and_tokenize(self):
+    def _read_files_and_tokenize(self, train_ratio):
         dataframes = []
         for parquet_file in self.parquet_files:
             # read parquet files and cache
