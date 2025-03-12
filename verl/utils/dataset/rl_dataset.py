@@ -88,7 +88,8 @@ class RLHFDataset(Dataset):
                  cache_dir='~/.cache/verl/rlhf',
                  chat_template_func=None,
                  return_raw_chat=False,
-                 truncation='error'):
+                 truncation='error',
+                 size_ratio=1):
         if not isinstance(parquet_files, (List, ListConfig)):
             parquet_files = [parquet_files]
 
@@ -111,7 +112,7 @@ class RLHFDataset(Dataset):
         # default not store
         self.serialize_dataset = False
         self._download()
-        self._read_files_and_tokenize()
+        self._read_files_and_tokenize(train_ratio)
 
     def _download(self, use_origin_parquet=False):
         from verl.utils.fs import copy_to_local
@@ -136,9 +137,10 @@ class RLHFDataset(Dataset):
             tokenizer.apply_chat_template(doc[prompt_key], add_generation_prompt=True)) <= self.max_prompt_length,
                                                              axis=1)]
 
-        # print(f'filter dataset len: {len(self.dataframe)}')
-        # print(f"[TEST only] select the first 512 samples for testing")
-        # self.dataframe = self.dataframe.head(512)
+        if size_ratio<1:
+            size = int(len(self.data_frame)*train_ratio)
+            print(f"[TEST only] select the first {size} for testing")
+            self.dataframe = self.dataframe.head(size)
 
         self.dataframe['offpolicy_rewards'] = [[] for _ in range(len(self.dataframe))]
         self.dataframe['offpolicy_log_probs'] = [[] for _ in range(len(self.dataframe))]
