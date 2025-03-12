@@ -1148,8 +1148,9 @@ class RayPPOTrainer(object):
                             val_metrics: dict = self._validate()
                         metrics.update(val_metrics)
 
-                    if self.config.trainer.save_freq > 0 and \
-                            self.global_steps % self.config.trainer.save_freq == 0:
+                    if (self.config.trainer.save_freq > 0 and \
+                            self.global_steps % self.config.trainer.save_freq == 0) or \
+                            (batch_idx==len(self.train_dataloader)-1 and epoch==0):
                         with _timer('save_checkpoint', timing_raw):
                             self._save_checkpoint()
 
