@@ -138,7 +138,7 @@ class RLHFDataset(Dataset):
                                                              axis=1)]
 
         if train_ratio<1:
-            size = int(len(self.data_frame)*train_ratio)
+            size = int(len(self.dataframe)*train_ratio)
             print(f"[TEST only] select the first {size} for testing")
             self.dataframe = self.dataframe.head(size)
 
