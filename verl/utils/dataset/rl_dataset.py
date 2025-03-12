@@ -89,7 +89,7 @@ class RLHFDataset(Dataset):
                  chat_template_func=None,
                  return_raw_chat=False,
                  truncation='error',
-                 size_ratio=1):
+                 train_ratio=1):
         if not isinstance(parquet_files, (List, ListConfig)):
             parquet_files = [parquet_files]
 
@@ -137,7 +137,7 @@ class RLHFDataset(Dataset):
             tokenizer.apply_chat_template(doc[prompt_key], add_generation_prompt=True)) <= self.max_prompt_length,
                                                              axis=1)]
 
-        if size_ratio<1:
+        if train_ratio<1:
             size = int(len(self.data_frame)*train_ratio)
             print(f"[TEST only] select the first {size} for testing")
             self.dataframe = self.dataframe.head(size)

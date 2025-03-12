@@ -29,7 +29,7 @@ EXPERIMENT_NAME='deepscaler-1.5b-2k'
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_ratio = 0.125 \
+    data.train_ratio=0.125 \
     data.train_files=$HOME/data/deepscaler/train.parquet \
     data.val_files=$HOME/data/aime/test.parquet \
     data.train_batch_size=128 \
