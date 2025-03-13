@@ -442,7 +442,9 @@ class RayPPOTrainer(object):
 
         # Track variance
         self.return_rewards_std = True
-        self.prev_variance = {}
+        self.prev_variances = {}
+        self.visit_counts = {} # Store the number of visits for each unique samples
+        self.latest_reward_mean = {} # Store the latest reward mean for each unique samples
 
 
     def _validate_config(self):
@@ -837,13 +839,13 @@ class RayPPOTrainer(object):
         with open(local_latest_checkpointed_iteration, 'w') as f:
             f.write(str(self.global_steps))
 
-        # Save prev_variance to file
-        prev_variance_path = os.path.join(
+        # Save prev_variances to file
+        prev_variances_path = os.path.join(
             self.config.trainer.default_local_dir, 
             f'global_step_{self.global_steps}', 
-            'prev_variance.pt'
+            'prev_variances.pt'
         )
-        torch.save(self.prev_variance, prev_variance_path)
+        torch.save(self.prev_variances, prev_variances_path)
 
     def _load_checkpoint(self):
         if self.config.trainer.resume_mode == 'disable':
@@ -898,11 +900,11 @@ class RayPPOTrainer(object):
         else:
             print(f"Warning: No dataloader state found at {dataloader_local_path}, will start from scratch")
 
-        prev_variance_path = os.path.join(global_step_folder, 'prev_variance.pt')
-        if os.path.exists(prev_variance_path):
-            self.prev_variance = torch.load(prev_variance_path)
+        prev_variances_path = os.path.join(global_step_folder, 'prev_variances.pt')
+        if os.path.exists(prev_variances_path):
+            self.prev_variances = torch.load(prev_variances_path)
         else:
-            print("No prev_variance checkpoint found. Starting fresh.")
+            print("No prev_variances checkpoint found. Starting fresh.")
 
     def _balance_batch(self, batch: DataProto, metrics, logging_prefix='global_seqlen'):
         """Reorder the data on single controller such that each dp rank gets similar total tokens"""
@@ -965,9 +967,9 @@ class RayPPOTrainer(object):
             }
 
         # Recording the previous variance
-        if not self.prev_variance:
+        if not self.prev_variances:
             for idx in self.train_dataset.get_all_prompt_ids():
-                self.prev_variance[idx] = 0.25
+                self.prev_variances[idx] = 0.25
 
         for epoch in range(self.config.trainer.total_epochs):
             for batch_idx, batch_dict in enumerate(self.train_dataloader):
@@ -981,7 +983,7 @@ class RayPPOTrainer(object):
 
                 # Estimate the variance of the rewards for the tracked samples to decide if we need generation or not
                 index = batch.non_tensor_batch['index']
-                variance_list = [(idx, self.prev_variance[idx]) for idx in index]
+                variance_list = [(idx, self.prev_variances[idx]) for idx in index]
 
                 # Sort the indices by variance in descending order
                 variance_list.sort(key=lambda x: x[1], reverse=True)
@@ -995,6 +997,7 @@ class RayPPOTrainer(object):
                     print(f"Greedily select the 50%.")
                 else:
                     est_batch_var = np.mean([var for _, var in variance_list])
+                    
                 
                 if self.config.active_strategy.var_threshold and est_batch_var < self.config.active_strategy.var_threshold:
                     print(f"Skipping generation for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
@@ -1157,10 +1160,12 @@ class RayPPOTrainer(object):
                 total_var = 0
                 for unique_id, i in zip(unique_ids, first_occurrence):
                     variance = (batch.batch['rewards_std'][i]) ** 2
-                    var_est_error += np.absolute(variance-self.prev_variance[unique_id])/len(unique_ids)
+                    var_est_error += np.absolute(variance-self.prev_variances[unique_id])/len(unique_ids)
                     var_est_error_ratio +=var_est_error/np.absolute(variance)
                     total_var += variance/len(unique_ids)
-                    self.prev_variance[unique_id] = variance
+                    self.prev_variances[unique_id] = variance
+                    self.visit_counts[unique_id] += 1
+                    self.latest_reward_mean[unique_id] = batch.batch['rewards_mean'][i].item()
                     if unique_id in tracked_samples:
                         rewards_mean = batch.batch['rewards_mean'][i]
                         # print(f"The rewards variance of the tracked sample at epoch {unique_id} is: {variance}")
@@ -1175,9 +1180,10 @@ class RayPPOTrainer(object):
                     "est_var_error/ratio_sep":var_est_error_ratio,
                     "est_var_error/ratio": var_est_error/total_var
                     })
+                
                 logger.log(data=metrics, step=self.global_steps)
 
-                if self.return_rewards_std:
+                if self.return_rewards_std and 'wandb' in self.config.trainer.logger:
                     # Save the variance of the tracked samples to a file
 
                     # Create a table with columns: uid, and one column per epoch.
@@ -1189,10 +1195,14 @@ class RayPPOTrainer(object):
                         row = [idx] + variances + self.tracked_rewards_mean[idx]
                         table.add_data(*row)
                     wandb.log({"tracked_variances_table": table})
-
+                    
+                if batch_idx==len(self.train_dataloader)-1:
+                    visit_counts_hist = wandb.Histogram(np.array(list(self.visit_counts.values())))
+                    latest_reward_mean_hist = wandb.Histogram(np.array(list(self.latest_reward_mean.values())))
+                    if 'wandb' in self.config.trainer.logger:
+                        wandb.log({"visit_counts/histogram": visit_counts_hist, "visit_count/latest_reward": latest_reward_mean_hist})
 
                 if self.global_steps >= self.total_training_steps:
-
                     # perform validation after training
                     if self.val_reward_fn is not None:
                         val_metrics = self._validate()
