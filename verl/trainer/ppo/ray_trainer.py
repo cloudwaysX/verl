@@ -850,14 +850,28 @@ class RayPPOTrainer(object):
             f'global_step_{self.global_steps}', 
             'visited_counts.pt'
         )
-        return_rewards_std_path = os.path.join(
+        latest_rewards_mean_path = os.path.join(
             self.config.trainer.default_local_dir, 
             f'global_step_{self.global_steps}', 
-            'return_rewards_std.pt'
+            'latest_rewards_mean.pt'
         )
+        tracked_variances_path = os.path.join(
+            self.config.trainer.default_local_dir, 
+            f'global_step_{self.global_steps}', 
+            'tracked_variances.pt'
+        )
+        tracked_rewards_mean_path = os.path.join(
+            self.config.trainer.default_local_dir, 
+            f'global_step_{self.global_steps}', 
+            'tracked_rewards_mean.pt'
+        )
+        
+        
         torch.save(self.prev_variances, prev_variances_path)
         torch.save(self.visit_counts, visited_counts_path)
-        torch.save(self.return_rewards_std, return_rewards_std_path)
+        torch.save(self.latest_reward_mean, latest_rewards_mean_path)
+        torch.save(self.tracked_variances, tracked_variances_path)
+        torch.save(self.tracked_rewards_mean, tracked_rewards_mean_path)
 
     def _load_checkpoint(self):
         if self.config.trainer.resume_mode == 'disable':
@@ -914,7 +928,10 @@ class RayPPOTrainer(object):
 
         prev_variances_path = os.path.join(global_step_folder, 'prev_variances.pt')
         visited_counts_path = os.path.join(global_step_folder, 'visited_counts.pt')
-        return_rewards_std_path = os.path.join(global_step_folder, 'return_rewards_std.pt')
+        latest_rewards_mean_path = os.path.join(global_step_folder, 'latest_rewards_mean.pt')
+        tracked_variances_path = os.path.join(global_step_folder, 'tracked_variances.pt')
+        tracked_rewards_mean_path = os.path.join(global_step_folder, 'tracked_rewards_mean.pt')
+
         if os.path.exists(prev_variances_path):
             self.prev_variances = torch.load(prev_variances_path)
         else:
@@ -923,10 +940,18 @@ class RayPPOTrainer(object):
             self.visit_counts = torch.load(visited_counts_path)
         else:
             print("No visit_counts checkpoint found. Starting fresh.")
-        if os.path.exists(return_rewards_std_path):
-            self.return_rewards_std = torch.load(return_rewards_std_path)
+        if os.path.exists(latest_rewards_mean_path):
+            self.latest_reward_mean = torch.load(latest_rewards_mean_path)
         else:
-            print("No return_rewards_std checkpoint found. Starting fresh.")
+            print("No latest_rewards_mean checkpoint found. Starting fresh.")
+        if os.path.exists(tracked_variances_path):
+            self.tracked_variances = torch.load(tracked_variances_path)
+        else:
+            print("No tracked_variances checkpoint found. Starting fresh.")
+        if os.path.exists(tracked_rewards_mean_path):
+            self.tracked_rewards_mean = torch.load(tracked_rewards_mean_path)
+        else:
+            print("No tracked_rewards_mean checkpoint found. Starting fresh.")
 
     def _balance_batch(self, batch: DataProto, metrics, logging_prefix='global_seqlen'):
         """Reorder the data on single controller such that each dp rank gets similar total tokens"""
