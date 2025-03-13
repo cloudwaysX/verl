@@ -1006,10 +1006,12 @@ class RayPPOTrainer(object):
                 index = batch.non_tensor_batch['index']
                 
                 # Pending: initialize the visited counts and last reward mean
-                if epoch == 0:
-                    self.visit_counts.update({idx: 0 for idx in index})
-                    self.latest_reward_mean.update({idx: 0 for idx in index})
-                
+                for idx in index:
+                    if idx not in self.visit_counts:
+                        self.visit_counts[idx] = 0
+                    if idx not in self.latest_reward_mean:
+                        self.latest_reward_mean[idx] = 0
+    
                 # Sort the indices by variance in descending order
                 variance_list = [(idx, self.prev_variances[idx]) for idx in index]
                 variance_list.sort(key=lambda x: x[1], reverse=True)
@@ -1226,7 +1228,7 @@ class RayPPOTrainer(object):
                     visit_counts_hist = wandb.Histogram(np.array(list(self.visit_counts.values())))
                     latest_reward_mean_hist = wandb.Histogram(np.array(list(self.latest_reward_mean.values())))
                     if 'wandb' in self.config.trainer.logger:
-                        wandb.log({"visit_counts/histogram": visit_counts_hist, "visit_count/latest_reward": latest_reward_mean_hist})
+                        wandb.log({"visit_counts/histogram": visit_counts_hist, "visit_counts/latest_reward": latest_reward_mean_hist})
 
                 if self.global_steps >= self.total_training_steps:
                     # perform validation after training
