@@ -1189,7 +1189,7 @@ class RayPPOTrainer(object):
                 for unique_id, i in zip(unique_ids, first_occurrence):
                     variance = (batch.batch['rewards_std'][i]) ** 2
                     var_est_error += np.absolute(variance-self.prev_variances[unique_id])/len(unique_ids)
-                    var_est_error_ratio +=var_est_error/np.absolute(variance)
+                    var_est_error_ratio +=np.absolute(variance-self.prev_variances[unique_id])/len(unique_ids)/np.absolute(variance)
                     total_var += variance/len(unique_ids)
                     self.prev_variances[unique_id] = variance
                     self.visit_counts[unique_id] += 1
@@ -1247,7 +1247,7 @@ class RayPPOTrainer(object):
                                 "prompts/latest_reward_mean_max": np.max(latest_reward_mean),
                                 "prompts/latest_reward_mean_min": np.min(latest_reward_mean),
                                 "prompts/latest_reward_mean_std": np.std(latest_reward_mean)}, step=self.global_steps)
-                    logger.log(data=metrics, step=self.global_steps)
+                logger.log(data=metrics, step=self.global_steps)
 
                 if self.global_steps >= self.total_training_steps:
                     # perform validation after training
