@@ -1225,10 +1225,18 @@ class RayPPOTrainer(object):
                     wandb.log({"tracked_variances_table": table})
                     
                 if batch_idx==len(self.train_dataloader)-1:
-                    visit_counts_hist = wandb.Histogram(np.array(list(self.visit_counts.values())))
-                    latest_reward_mean_hist = wandb.Histogram(np.array(list(self.latest_reward_mean.values())))
+                    visit_counts = np.array(list(self.visit_counts.values()))
+                    visit_counts_hist = wandb.Histogram(visit_counts, num_bins=self.config.trainer.total_epochs)
+                    visit_counts_medium = np.median(visit_counts)
+                    visit_counts_max = np.max(visit_counts)
+                    visit_counts_min = np.min(visit_counts)
+                    # latest_reward_mean_hist = wandb.Histogram(np.array(list(self.latest_reward_mean.values())))
                     if 'wandb' in self.config.trainer.logger:
-                        wandb.log({f"visit_counts/histogram_{epoch}": visit_counts_hist, f"visit_counts/latest_reward_{epoch}": latest_reward_mean_hist})
+                        # wandb.log({f"visit_counts/histogram_{epoch}": visit_counts_hist, f"visit_counts/latest_reward_{epoch}": latest_reward_mean_hist})
+                        wandb.log({f"visit_counts/histogram_{epoch}": visit_counts_hist, 
+                                   "visit_counts/visit_counts_medium": visit_counts_medium,
+                                    "visit_counts/visit_counts_max": visit_counts_max,
+                                    "visit_counts/visit_counts_min": visit_counts_min})
 
                 if self.global_steps >= self.total_training_steps:
                     # perform validation after training
