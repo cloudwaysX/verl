@@ -1003,11 +1003,15 @@ class RayPPOTrainer(object):
 
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
 
-                # Estimate the variance of the rewards for the tracked samples to decide if we need generation or not
                 index = batch.non_tensor_batch['index']
-                variance_list = [(idx, self.prev_variances[idx]) for idx in index]
-
+                
+                # Pending: initialize the visited counts and last reward mean
+                if epoch == 0:
+                    self.visit_counts.update({idx: 0 for idx in index})
+                    self.latest_reward_mean.update({idx: 0 for idx in index})
+                
                 # Sort the indices by variance in descending order
+                variance_list = [(idx, self.prev_variances[idx]) for idx in index]
                 variance_list.sort(key=lambda x: x[1], reverse=True)
 
                 # Select the top 50% indices
