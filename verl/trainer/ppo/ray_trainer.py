@@ -1158,7 +1158,7 @@ class RayPPOTrainer(object):
                 for unique_id, i in zip(unique_ids, first_occurrence):
                     variance = (batch.batch['rewards_std'][i]) ** 2
                     var_est_error += np.absolute(variance-self.prev_variance[unique_id])/len(unique_ids)
-                    var_est_error_ratio +=var_est_error/variance
+                    var_est_error_ratio +=var_est_error/np.absolute(variance)
                     total_var += variance/len(unique_ids)
                     self.prev_variance[unique_id] = variance
                     if unique_id in tracked_samples:
@@ -1173,7 +1173,7 @@ class RayPPOTrainer(object):
                 metrics.update({
                     "est_var_error/mean": var_est_error,
                     "est_var_error/ratio_sep":var_est_error_ratio,
-                    "est_vat_error/ratio": var_est_error/total_var
+                    "est_var_error/ratio": var_est_error/total_var
                     })
                 logger.log(data=metrics, step=self.global_steps)
 
