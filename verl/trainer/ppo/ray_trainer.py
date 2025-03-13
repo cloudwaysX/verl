@@ -1228,7 +1228,7 @@ class RayPPOTrainer(object):
                     visit_counts_hist = wandb.Histogram(np.array(list(self.visit_counts.values())))
                     latest_reward_mean_hist = wandb.Histogram(np.array(list(self.latest_reward_mean.values())))
                     if 'wandb' in self.config.trainer.logger:
-                        wandb.log({"visit_counts/histogram": visit_counts_hist, "visit_counts/latest_reward": latest_reward_mean_hist})
+                        wandb.log({f"visit_counts/histogram_{epoch}": visit_counts_hist, f"visit_counts/latest_reward_{epoch}": latest_reward_mean_hist})
 
                 if self.global_steps >= self.total_training_steps:
                     # perform validation after training
