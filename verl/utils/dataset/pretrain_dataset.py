@@ -20,6 +20,7 @@ Each parquet file contains
 
 from typing import List, Union
 
+import logging
 import pandas as pd
 
 import torch
@@ -66,12 +67,13 @@ class PretrainDataset(Dataset):
         self._download()
         self._read_files_and_tokenize()
         
+    def print_examples(self, logger):
         print("Raw data examples:")
         n_examples = min(3, len(self.prompts))
         for i in range(n_examples):
-            print(f"Example {i}:")
-            print(f"Prompt: {self.prompts[i]}")
-            print(f"Response: {self.responses[i]}")
+            logger.info(f"Example {i}:")
+            logger.info(f"Prompt: {self.prompts[i]}")
+            logger.info(f"Response: {self.responses[i]}")
 
     def _download(self):
         for i, parquet_file in enumerate(self.parquet_files):

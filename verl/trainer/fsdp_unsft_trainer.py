@@ -129,6 +129,7 @@ class FSDPPretrainTrainer(object):
                                         response_dict_keys=config.data.get('response_dict_keys', None),
                                         max_length=config.data.max_length,
                                         truncation=config.data.truncation)
+        self.train_dataset.print_examples(logger)
         self.val_dataset = SFTDataset(parquet_files=config.data.val_files,
                                       tokenizer=self.tokenizer,
                                       prompt_key=config.data.prompt_key,
