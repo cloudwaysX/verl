@@ -1061,6 +1061,32 @@ class RayPPOTrainer(object):
                         with _timer('testing', timing_raw):
                             val_metrics: dict = self._validate()
                         metrics.update(val_metrics)
+                        
+                    if batch_idx==len(self.train_dataloader)-1:
+                        visit_counts = np.array(list(self.visit_counts.values()))
+                        latest_reward_mean = np.array(list(self.latest_reward_mean.values()))
+                        metrics.update({"prompts/visit_counts_median": np.median(visit_counts),
+                                    "prompts/visit_counts_max": np.max(visit_counts),
+                                    "prompts/visit_counts_min": np.min(visit_counts),
+                                    "prompts/visit_counts_std": np.std(visit_counts),
+                                    "prompts/latest_reward_mean_median": np.median(latest_reward_mean),
+                                    "prompts/latest_reward_mean_max": np.max(latest_reward_mean),
+                                    "prompts/latest_reward_mean_min": np.min(latest_reward_mean),
+                                    "prompts/latest_reward_mean_std": np.std(latest_reward_mean)}, step=self.global_steps)
+                    logger.log(data=metrics, step=self.global_steps)
+
+                    if self.global_steps >= self.total_training_steps:
+                        # perform validation after training
+                        if self.val_reward_fn is not None:
+                            val_metrics = self._validate()
+                            pprint(f'Final validation metrics: {val_metrics}')
+                            logger.log(data=val_metrics, step=self.global_steps)
+                        if self.config.trainer.save_freq > 0 and \
+                                (self.global_steps - 1) % self.config.trainer.save_freq != 0:
+                            with _timer('save_checkpoint', timing_raw):
+                                self._save_checkpoint()
+                        
+                        return
                     continue
 
                 print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
@@ -1250,18 +1276,6 @@ class RayPPOTrainer(object):
                     wandb.log({"tracked_variances_table": table})
                     
                 if batch_idx==len(self.train_dataloader)-1:
-                    # visit_counts = np.array(list(self.visit_counts.values()))
-                    # visit_counts_hist = wandb.Histogram(visit_counts, num_bins=self.config.trainer.total_epochs)
-                    # visit_counts_medium = np.median(visit_counts)
-                    # visit_counts_max = np.max(visit_counts)
-                    # visit_counts_min = np.min(visit_counts)
-                    # # latest_reward_mean_hist = wandb.Histogram(np.array(list(self.latest_reward_mean.values())))
-                    # if 'wandb' in self.config.trainer.logger:
-                    #     # wandb.log({f"visit_counts/histogram_{epoch}": visit_counts_hist, f"visit_counts/latest_reward_{epoch}": latest_reward_mean_hist})
-                    #     wandb.log({f"visit_counts/histogram_{epoch}": visit_counts_hist})
-                    # logger.log({"visit_counts/visit_counts_medium": visit_counts_medium,
-                    #             "visit_counts/visit_counts_max": visit_counts_max,
-                    #             "visit_counts/visit_counts_min": visit_counts_min}, step=self.global_steps)
                     visit_counts = np.array(list(self.visit_counts.values()))
                     latest_reward_mean = np.array(list(self.latest_reward_mean.values()))
                     metrics.update({"prompts/visit_counts_median": np.median(visit_counts),
