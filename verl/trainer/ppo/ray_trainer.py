@@ -441,7 +441,7 @@ class RayPPOTrainer(object):
         self._create_dataloader()
 
         # Track variance
-        self.return_rewards_std = False
+        self.return_rewards_std = True
         self.prev_variances = {}
         self.visit_counts = {} # Store the number of visits for each unique samples
         self.latest_reward_mean = {} # Store the latest reward mean for each unique samples
