@@ -65,6 +65,13 @@ class SFTDataset(Dataset):
 
         self._download()
         self._read_files_and_tokenize()
+        
+        print("Raw data examples:")
+        n_examples = min(3, len(self.prompts))
+        for i in range(n_examples):
+            print(f"Example {i}:")
+            print(f"Prompt: {self.prompts[i]}")
+            print(f"Response: {self.responses[i]}")
 
     def _download(self):
         for i, parquet_file in enumerate(self.parquet_files):
