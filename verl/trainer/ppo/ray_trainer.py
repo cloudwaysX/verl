@@ -18,6 +18,7 @@ This trainer supports model-agonistic model initialization with huggingface
 
 from collections import defaultdict
 import os
+import random
 import uuid
 import hashlib # for hashing the prompt
 from contextlib import contextmanager
@@ -1043,11 +1044,17 @@ class RayPPOTrainer(object):
 
                 # Select the top 50% indices
                 if self.config.active_strategy.strategy_type and self.config.active_strategy.strategy_type == "greedy":
-                    # Update the batch to keep only selected top 50% indices
-                    selected_indices = [i for i, idx in enumerate(index) if idx in set(idx for idx, _ in variance_list[:len(variance_list)//2])]
-                    batch.reorder(torch.tensor(selected_indices))
+                    p = random.random()
+                    if p < self.config.active_strategy.greedy_exploration_ratio:
+                        print(f"With probability {self.config.active_strategy.greedy_exploration_ratio}, randomly select the 50%.")
+                        selected_indices = set(random.sample(index, len(index)//2))
+                    else:
+                        # Update the batch to keep only selected top 50% indices
+                        print(f"With probability {1-self.config.active_strategy.greedy_exploration_ratio}, select the top 50%.")
+                        selected_indices = set(idx for idx, _ in variance_list[:len(variance_list)//2])
+                    selected_inbatch_idx = [i for i, idx in enumerate(index) if idx in selected_indices]
+                    batch.reorder(torch.tensor(selected_inbatch_idx))
                     est_batch_var = np.mean([var for _, var in variance_list[:len(variance_list)//2]])
-                    print(f"Greedily select the 50%.")
                 else:
                     est_batch_var = np.mean([var for _, var in variance_list])
                     
