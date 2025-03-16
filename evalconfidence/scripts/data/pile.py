@@ -37,17 +37,18 @@ def main():
     
     # Load the Pile dataset from Hugging Face. Adjust the dataset name/config if needed.
     dataset = datasets.load_dataset("monology/pile-uncopyrighted", split=args.split, trust_remote_code=True)
-    
-    # Process the dataset by mapping our function over it.
-    processed_dataset = dataset.map(
-        lambda example, idx: process_pile_example(example, args.split, idx),
-        with_indices=True
-    )
-    
-    # Save the processed dataset to a JSON Lines file.
+
+    chunk_size = 50_000 # Adjust this number based on your memory constraints.
     local_path = os.path.join(local_dir, f"{args.split}.jsonl")
-    processed_dataset.to_json(local_path)
-    print(f"Saved processed {args.split} split to {local_path}")
+
+    with open(local_path, 'w') as out_file:
+        # Assuming dataset is a list-like object; for streaming datasets, adjust accordingly.
+        for start_idx in range(0, len(dataset), chunk_size):
+            chunk = dataset[start_idx: start_idx + chunk_size]
+            for idx, example in enumerate(chunk, start=start_idx):
+                processed = process_pile_example(example, args.split, idx)
+                out_file.write(json.dumps(processed) + "\n")
+            print(f"Processed and saved chunk starting at index {start_idx}")
     
     # Optionally copy the output to HDFS.
     if args.hdfs_dir is not None:
