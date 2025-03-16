@@ -20,6 +20,7 @@ Each parquet file contains
 
 from typing import List, Union
 
+import logging
 import pandas as pd
 
 import torch
@@ -43,6 +44,7 @@ class PretrainDataset(Dataset):
                  prompt_dict_keys=None,
                  response_key='response',
                  response_dict_keys=None,
+                 text_key=None,
                  max_length=1024,
                  truncation='error'):
         assert truncation in ['error', 'left', 'right']
@@ -60,18 +62,20 @@ class PretrainDataset(Dataset):
         self.response_key = response_key if isinstance(response_key, (tuple, list)) else [response_key]
         self.prompt_dict_keys = [] if not prompt_dict_keys else prompt_dict_keys
         self.response_dict_keys = [] if not response_dict_keys else response_dict_keys
+        self.text_key = text_key
 
         self.max_length = max_length
 
         self._download()
         self._read_files_and_tokenize()
         
+    def print_examples(self, logger):
         print("Raw data examples:")
         n_examples = min(3, len(self.prompts))
         for i in range(n_examples):
-            print(f"Example {i}:")
-            print(f"Prompt: {self.prompts[i]}")
-            print(f"Response: {self.responses[i]}")
+            logger.info(f"Example {i}:")
+            logger.info(f"Prompt: {self.prompts[i]}")
+            logger.info(f"Response: {self.responses[i]}")
 
     def _download(self):
         for i, parquet_file in enumerate(self.parquet_files):
@@ -91,25 +95,29 @@ class PretrainDataset(Dataset):
             dataframe = pd.read_parquet(parquet_file)
             dataframes.append(dataframe)
         self.dataframe = pd.concat(dataframes)
-        self.prompts = self.dataframe[self.prompt_key]
-        for key in self.prompt_dict_keys:
-            # type(x): pandas.core.series.Series
-            # type(x[0]): numpy.ndarray
-            # type(x[0][0]): dict
-            try:
-                self.prompts = self.prompts.apply(lambda x: series_to_item(x)[key], axis=1)
-            except Exception:
-                print(f'self.prompts={self.prompts}')
-                raise
-        self.prompts = self.prompts.tolist()
-        self.responses = self.dataframe[self.response_key]
-        for key in self.response_dict_keys:
-            try:
-                self.responses = self.responses.apply(lambda x: series_to_item(x)[key], axis=1)
-            except Exception:
-                print(f'self.responses={self.responses}')
-                raise
-        self.responses = self.responses.tolist()
+
+        if self.text_key is None:
+            self.prompts = self.dataframe[self.prompt_key]
+            for key in self.prompt_dict_keys:
+                # type(x): pandas.core.series.Series
+                # type(x[0]): numpy.ndarray
+                # type(x[0][0]): dict
+                try:
+                    self.prompts = self.prompts.apply(lambda x: series_to_item(x)[key], axis=1)
+                except Exception:
+                    print(f'self.prompts={self.prompts}')
+                    raise
+            self.prompts = self.prompts.tolist()
+            self.responses = self.dataframe[self.response_key]
+            for key in self.response_dict_keys:
+                try:
+                    self.responses = self.responses.apply(lambda x: series_to_item(x)[key], axis=1)
+                except Exception:
+                    print(f'self.responses={self.responses}')
+                    raise
+            self.responses = self.responses.tolist()
+        else:
+            self.text = self.dataframe[self.text_key]
 
     def __len__(self):
         return len(self.prompts)
@@ -117,15 +125,17 @@ class PretrainDataset(Dataset):
     def __getitem__(self, item):
         tokenizer = self.tokenizer
 
-        prompt = self.prompts[item]
-        response = self.responses[item]
-        
-        # apply chat template
-        prompt_chat = [{'role': 'user', 'content': prompt}]
-        # string
-        prompt_chat_str = tokenizer.apply_chat_template(prompt_chat, add_generation_prompt=True, tokenize=False)
-        response_chat_str = response + tokenizer.eos_token
-        text = prompt_chat_str + response_chat_str
+        if self.text_key is None:
+            prompt = self.prompts[item]
+            response = self.responses[item]
+            # apply chat template
+            prompt_chat = [{'role': 'user', 'content': prompt}]
+            # string
+            prompt_chat_str = tokenizer.apply_chat_template(prompt_chat, add_generation_prompt=True, tokenize=False)
+            response_chat_str = response + tokenizer.eos_token
+            text = prompt_chat_str + response_chat_str
+        else:
+            text = self.text[item]
 
         # tokenize
         input_ids_output = tokenizer(text, return_tensors='pt', add_special_tokens=False)
