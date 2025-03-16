@@ -441,7 +441,7 @@ class RayPPOTrainer(object):
         self._create_dataloader()
 
         # Track variance
-        self.return_rewards_std = False
+        self.return_rewards_std = True
         self.prev_variances = {}
         self.visit_counts = {} # Store the number of visits for each unique samples
         self.latest_reward_mean = {} # Store the latest reward mean for each unique samples
@@ -1051,7 +1051,6 @@ class RayPPOTrainer(object):
                 else:
                     est_batch_var = np.mean([var for _, var in variance_list])
                     
-                
                 if self.config.active_strategy.var_threshold and est_batch_var < self.config.active_strategy.var_threshold:
                     print(f"Skipping generation for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
                     

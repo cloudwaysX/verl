@@ -67,7 +67,7 @@ python3 -m verl.trainer.main_ppo \
     +trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
-    trainer.save_freq=100 \
+    trainer.save_freq=38 \
     trainer.test_freq=20 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \

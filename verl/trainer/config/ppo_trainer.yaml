@@ -14,8 +14,8 @@ data:
   train_ratio: 1
 
 active_strategy: 
-  var_threshold: None
-  strategy_type: None
+  var_threshold: null
+  strategy_type: null
 
 actor_rollout_ref:
   hybrid_engine: True
@@ -150,7 +150,7 @@ reward_model:
   use_dynamic_bsz: ${critic.use_dynamic_bsz}
   forward_max_token_len_per_gpu: ${critic.forward_max_token_len_per_gpu}
   reward_manager: naive
-  customized_reward_fn: null
+  customized_reward_fn_name: null
 
 algorithm:
   gamma: 1.0
