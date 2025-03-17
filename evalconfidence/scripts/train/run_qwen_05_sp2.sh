@@ -21,6 +21,7 @@ torchrun --standalone --nnodes=1 --nproc_per_node=$nproc_per_node \
     +data.val_prompt_dict_keys=['question'] \
     +data.val_response_dict_keys=['answer'] \
     data.truncation="right" \
+    data.max_length=8192 \
     optim.lr=1e-4 \
     data.micro_batch_size=1 \
     model.partial_pretrain=Qwen/Qwen2.5-0.5B \
@@ -28,7 +29,7 @@ torchrun --standalone --nnodes=1 --nproc_per_node=$nproc_per_node \
     trainer.project_name=evalconfidence_debug \
     trainer.experiment_name=gsm8k-qwen-2.5-0.5b-pretrain-sp2 \
     trainer.logger=['console','wandb'] \
-    trainer.total_training_steps=500 \
+    trainer.total_training_steps=2000 \
     trainer.default_hdfs_dir=null $@ \
     ulysses_sequence_parallel_size=2 \
     use_remove_padding=true

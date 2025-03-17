@@ -69,7 +69,7 @@ class PretrainDataset(Dataset):
         self._download()
         self._read_files_and_tokenize()
         
-    def print_examples(self):
+    def print_examples(self,logger):
         print("Raw data examples:")
         if self.prompt_key is None:
             n_examples = min(3, len(self.prompts))
@@ -156,8 +156,8 @@ class PretrainDataset(Dataset):
 
         # tokenize
         input_ids_output = tokenizer(text, return_tensors='pt', add_special_tokens=False)
-        input_ids = input_ids_output['input_ids'][0]
-        attention_mask = input_ids_output['attention_mask'][0]
+        input_ids = input_ids_output['input_ids'][0].long()
+        attention_mask = input_ids_output['attention_mask'][0].long()
 
         # padding to max length
         sequence_length = input_ids.shape[0]

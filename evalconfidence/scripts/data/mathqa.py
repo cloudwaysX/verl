@@ -32,7 +32,7 @@ def process_math_qa_example(example, split, idx, data_source="allenai/math_qa"):
         "extra_info": {
             "split": split,
             "index": idx,
-            "answer": example["Rationale"].strip('"')
+            "answer": example["Rationale"].strip('"'),
             "question": example["Problem"],
         }
     }
@@ -59,8 +59,8 @@ def main():
             with_indices=True
         )
         
-        local_path = os.path.join(local_dir, f"{split}.jsonl")
-        processed_split.to_json(local_path)
+        local_path = os.path.join(local_dir, f"{split}.parquet")
+        processed_split.to_parquet(local_path)
         print(f"Saved processed {split} split to {local_path}")
     
     # Optionally copy the output to HDFS.
