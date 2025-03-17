@@ -65,24 +65,21 @@ class PretrainDataset(Dataset):
         self.text_key = text_key
 
         self.max_length = max_length
-        self.prompts=None
-        self.responses=None
-        self.texts=None
 
         self._download()
         self._read_files_and_tokenize()
         
     def print_examples(self, logger):
         print("Raw data examples:")
-        if self.prompts:
+        if self.prompt_key is None:
             n_examples = min(3, len(self.prompts))
             for i in range(n_examples):
                 logger.info(f"Example {i}:")
                 logger.info(f"Prompt: {self.prompts[i]}")
                 logger.info(f"Response: {self.responses[i]}")
         else:
-           n_examples=min(3, len(self.texts))
-           for i in range(n_examples):
+            n_examples=min(3, len(self.texts))
+            for i in range(n_examples):
                 logger.info(f"Example {i}:")
                 logger.info(f"Text: {self.texts[i]}")
 
@@ -129,7 +126,7 @@ class PretrainDataset(Dataset):
             self.texts = self.dataframe[self.text_key]
 
     def __len__(self):
-        if self.texts:
+        if self.text_key is not None:
             return len(self.texts)
         return len(self.prompts)
 
