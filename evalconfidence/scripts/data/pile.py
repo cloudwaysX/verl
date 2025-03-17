@@ -27,7 +27,8 @@ def process_pile_example(example, split, idx):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--local_dir', default='~/data/pile', help='Local directory to save processed data')
+    parser.add_argument('--local_dir', default='/mnt/pretraindata/pile', help='Local directory to save processed data')
+    parser.add_argument('--train_ratio', default=0.125, type=float)
     parser.add_argument('--hdfs_dir', default=None, help='HDFS directory to copy processed data to (optional)')
     parser.add_argument('--split', default='train', help='Dataset split to process (e.g., train, validation, test)')
     args = parser.parse_args()
@@ -37,18 +38,19 @@ def main():
     
     # Load the Pile dataset from Hugging Face. Adjust the dataset name/config if needed.
     dataset = datasets.load_dataset("monology/pile-uncopyrighted", split=args.split, trust_remote_code=True)
-
-    chunk_size = 50_000 # Adjust this number based on your memory constraints.
-    local_path = os.path.join(local_dir, f"{args.split}.jsonl")
-
-    with open(local_path, 'w') as out_file:
-        # Assuming dataset is a list-like object; for streaming datasets, adjust accordingly.
-        for start_idx in range(0, len(dataset), chunk_size):
-            chunk = dataset[start_idx: start_idx + chunk_size]
-            for idx, example in enumerate(chunk, start=start_idx):
-                processed = process_pile_example(example, args.split, idx)
-                out_file.write(json.dumps(processed) + "\n")
-            print(f"Processed and saved chunk starting at index {start_idx}")
+    dataset = dataset.select(range(int(len(dataset)*args.train_ratio)))
+    
+    # Process the dataset by mapping our function over it.
+    processed_dataset = dataset.map(
+        lambda example, idx: process_pile_example(example, args.split, idx),
+        with_indices=True,
+	num_proc=64
+    )
+    
+    # Save the processed dataset to a JSON Lines file.
+    local_path = os.path.join(local_dir, f"{args.split}.parquet")
+    processed_dataset.to_parquet(local_path)
+    print(f"Saved processed {args.split} split to {local_path}")
     
     # Optionally copy the output to HDFS.
     if args.hdfs_dir is not None:

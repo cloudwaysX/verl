@@ -13,22 +13,20 @@ shift 2
 
 torchrun --standalone --nnodes=1 --nproc_per_node=$nproc_per_node \
      -m verl.trainer.fsdp_unsft_trainer \
-    data.train_files=/mnt/pretraindata/pile/train.parquet \
+    data.train_files=$HOME/data/gsm8k/train.parquet \
     data.val_files=$HOME/data/gsm8k/test.parquet \
-    data.train_text_key=text \
-    data.val_prompt_key=extra_info \
-    data.val_response_key=extra_info \
-    +data.val_prompt_dict_keys=['question'] \
-    +data.val_response_dict_keys=['answer'] \
-    data.truncation="right" \
+    data.prompt_key=extra_info \
+    data.response_key=extra_info \
     optim.lr=1e-4 \
-    data.micro_batch_size=1 \
-    model.partial_pretrain=Qwen/Qwen2.5-0.5B \
+    +data.prompt_dict_keys=['question'] \
+    +data.response_dict_keys=['answer'] \
+    data.micro_batch_size=32 \
+    model.partial_pretrain=Qwen/Qwen2.5-1.5B \
     trainer.default_local_dir=$save_path \
     trainer.project_name=evalconfidence_debug \
-    trainer.experiment_name=gsm8k-qwen-2.5-0.5b-pretrain-sp2 \
+    trainer.experiment_name=gsm8k-qwen-2.5-1.5b-pretrain-sp2 \
     trainer.logger=['console','wandb'] \
-    trainer.total_training_steps=500 \
+    trainer.total_epochs=5 \
     trainer.default_hdfs_dir=null $@ \
-    ulysses_sequence_parallel_size=2 \
+    ulysses_sequence_parallel_size=1 \
     use_remove_padding=true

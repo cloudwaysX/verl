@@ -121,6 +121,7 @@ class FSDPPretrainTrainer(object):
     def _build_dataloader(self):
         config = self.config
         # build dataset
+        print("start bulding train dataset.")
         self.train_dataset = PretrainDataset(parquet_files=config.data.train_files,
                                         tokenizer=self.tokenizer,
                                         prompt_key=config.data.train_prompt_key,
@@ -130,6 +131,7 @@ class FSDPPretrainTrainer(object):
                                         text_key=config.data.train_text_key,
                                         max_length=config.data.max_length,
                                         truncation=config.data.truncation)
+        print("finish building train dataset")
         self.train_dataset.print_examples(logger)
         self.val_dataset = SFTDataset(parquet_files=config.data.val_files,
                                       tokenizer=self.tokenizer,
@@ -531,7 +533,7 @@ def main(config):
     ulysses_device_mesh = init_device_mesh(device_type='cuda',
                                            mesh_shape=(dp_size, config.ulysses_sequence_parallel_size),
                                            mesh_dim_names=('dp', 'sp'))
-    trainer = FSDPSFTTrainer(config=config, device_mesh=device_mesh, ulysses_device_mesh=ulysses_device_mesh)
+    trainer = FSDPPretrainTrainer(config=config, device_mesh=device_mesh, ulysses_device_mesh=ulysses_device_mesh)
     trainer.fit()
 
 

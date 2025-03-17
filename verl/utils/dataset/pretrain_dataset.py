@@ -65,17 +65,26 @@ class PretrainDataset(Dataset):
         self.text_key = text_key
 
         self.max_length = max_length
+        self.prompts=None
+        self.responses=None
+        self.texts=None
 
         self._download()
         self._read_files_and_tokenize()
         
     def print_examples(self, logger):
         print("Raw data examples:")
-        n_examples = min(3, len(self.prompts))
-        for i in range(n_examples):
-            logger.info(f"Example {i}:")
-            logger.info(f"Prompt: {self.prompts[i]}")
-            logger.info(f"Response: {self.responses[i]}")
+        if self.prompts:
+            n_examples = min(3, len(self.prompts))
+            for i in range(n_examples):
+                logger.info(f"Example {i}:")
+                logger.info(f"Prompt: {self.prompts[i]}")
+                logger.info(f"Response: {self.responses[i]}")
+        else:
+           n_examples=min(3, len(self.texts))
+           for i in range(n_examples):
+                logger.info(f"Example {i}:")
+                logger.info(f"Text: {self.texts[i]}")
 
     def _download(self):
         for i, parquet_file in enumerate(self.parquet_files):
@@ -117,9 +126,11 @@ class PretrainDataset(Dataset):
                     raise
             self.responses = self.responses.tolist()
         else:
-            self.text = self.dataframe[self.text_key]
+            self.texts = self.dataframe[self.text_key]
 
     def __len__(self):
+        if self.texts:
+            return len(self.texts
         return len(self.prompts)
 
     def __getitem__(self, item):
@@ -135,7 +146,7 @@ class PretrainDataset(Dataset):
             response_chat_str = response + tokenizer.eos_token
             text = prompt_chat_str + response_chat_str
         else:
-            text = self.text[item]
+            text = self.texts[item]
 
         # tokenize
         input_ids_output = tokenizer(text, return_tensors='pt', add_special_tokens=False)
