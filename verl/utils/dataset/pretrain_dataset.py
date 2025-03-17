@@ -130,7 +130,7 @@ class PretrainDataset(Dataset):
 
     def __len__(self):
         if self.texts:
-            return len(self.texts
+            return len(self.texts)
         return len(self.prompts)
 
     def __getitem__(self, item):
