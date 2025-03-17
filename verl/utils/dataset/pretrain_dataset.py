@@ -69,19 +69,28 @@ class PretrainDataset(Dataset):
         self._download()
         self._read_files_and_tokenize()
         
-    def print_examples(self, logger):
+    def print_examples(self):
         print("Raw data examples:")
         if self.prompt_key is None:
             n_examples = min(3, len(self.prompts))
             for i in range(n_examples):
-                logger.info(f"Example {i}:")
-                logger.info(f"Prompt: {self.prompts[i]}")
-                logger.info(f"Response: {self.responses[i]}")
+                print(f"Example {i}:")
+                if isinstance(self.prompts, pd.Series) or isinstance(self.prompts, pd.DataFrame):
+                    print(f"Prompt: {self.prompts.iloc[i]}")
+                else:
+                    print(f"Prompt: {self.prompts[i]}")
+                if isinstance(self.responses, pd.Series) or isinstance(self.responses, pd.DataFrame):
+                    print(f"Response: {self.responses.iloc[i]}")
+                else:
+                    print(f"Response: {self.responses[i]}")
         else:
             n_examples=min(3, len(self.texts))
             for i in range(n_examples):
-                logger.info(f"Example {i}:")
-                logger.info(f"Text: {self.texts[i]}")
+                print(f"Example {i}:")
+                if isinstance(self.texts, pd.Series) or isinstance(self.texts, pd.DataFrame):
+                    print(f"Text: {self.texts.iloc[i]}")
+                else:
+                    print(f"Text: {self.texts[i]}")
 
     def _download(self):
         for i, parquet_file in enumerate(self.parquet_files):

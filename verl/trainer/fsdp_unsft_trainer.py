@@ -132,7 +132,8 @@ class FSDPPretrainTrainer(object):
                                         max_length=config.data.max_length,
                                         truncation=config.data.truncation)
         print("finish building train dataset")
-        self.train_dataset.print_examples(logger)
+        if self.device_mesh.get_rank() == 0:
+            self.train_dataset.print_examples(logger)
         self.val_dataset = SFTDataset(parquet_files=config.data.val_files,
                                       tokenizer=self.tokenizer,
                                       prompt_key=config.data.val_prompt_key,
@@ -500,20 +501,21 @@ class FSDPPretrainTrainer(object):
                     self.save_checkpoint(step=global_step)
                     return
 
-            # validation
-            val_losses = []
-            for data in self.val_dataloader:
-                data = TensorDict(data, batch_size=self.config.data.micro_batch_size_per_gpu).cuda()
-                val_loss = self.validation_step(data)
-                val_losses.append(val_loss)
-            if rank == 0:
-                val_loss = torch.mean(torch.stack(val_losses))
-                metric = {'val/loss': val_loss.detach().item()}
-                tracking.log(data=metric, step=global_step)
-            torch.distributed.barrier()
+                if global_step % self.config.trainer.test_freq == 0:
+                    # validation
+                    val_losses = []
+                    for data in self.val_dataloader:
+                        data = TensorDict(data, batch_size=self.config.data.micro_batch_size_per_gpu).cuda()
+                        val_loss = self.validation_step(data)
+                        val_losses.append(val_loss)
+                    if rank == 0:
+                        val_loss = torch.mean(torch.stack(val_losses))
+                        metric = {'val/loss': val_loss.detach().item()}
+                        tracking.log(data=metric, step=global_step)
+                    torch.distributed.barrier()
 
-            # save checkpoint
-            self.save_checkpoint(step=global_step)
+                    # save checkpoint
+                    self.save_checkpoint(step=global_step)
 
 
 from verl.trainer.fsdp_sft_trainer import FSDPSFTTrainer
