@@ -40,11 +40,11 @@ class PretrainDataset(Dataset):
     def __init__(self,
                  parquet_files: Union[str, List[str]],
                  tokenizer,
-                 prompt_key='prompt',
+                 prompt_key=None,
                  prompt_dict_keys=None,
-                 response_key='response',
+                 response_key=None,
                  response_dict_keys=None,
-                 text_key=None,
+                 text_key="text",
                  max_length=1024,
                  truncation='error'):
         assert truncation in ['error', 'left', 'right']

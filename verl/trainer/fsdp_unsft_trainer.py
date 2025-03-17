@@ -123,19 +123,20 @@ class FSDPPretrainTrainer(object):
         # build dataset
         self.train_dataset = PretrainDataset(parquet_files=config.data.train_files,
                                         tokenizer=self.tokenizer,
-                                        prompt_key=config.data.prompt_key,
-                                        prompt_dict_keys=config.data.get('prompt_dict_keys', None),
-                                        response_key=config.data.response_key,
-                                        response_dict_keys=config.data.get('response_dict_keys', None),
+                                        prompt_key=config.data.train_prompt_key,
+                                        prompt_dict_keys=config.data.get('train_prompt_dict_keys', None),
+                                        response_key=config.data.train_response_key,
+                                        response_dict_keys=config.data.get('train_response_dict_keys', None),
+                                        text_key=config.data.train_text_key,
                                         max_length=config.data.max_length,
                                         truncation=config.data.truncation)
         self.train_dataset.print_examples(logger)
         self.val_dataset = SFTDataset(parquet_files=config.data.val_files,
                                       tokenizer=self.tokenizer,
-                                      prompt_key=config.data.prompt_key,
-                                      prompt_dict_keys=config.data.get('prompt_dict_keys', None),
-                                      response_key=config.data.response_key,
-                                      response_dict_keys=config.data.get('response_dict_keys', None),
+                                      prompt_key=config.data.val_prompt_key,
+                                      prompt_dict_keys=config.data.get('val_prompt_dict_keys', None),
+                                      response_key=config.data.val_response_key,
+                                      response_dict_keys=config.data.get('val_response_dict_keys', None),
                                       max_length=config.data.max_length,
                                       truncation=config.data.truncation)
 
@@ -521,7 +522,7 @@ from torch.distributed.device_mesh import init_device_mesh
 from verl.utils.distributed import initialize_global_process_group
 
 
-@hydra.main(config_path='config', config_name='sft_trainer', version_base=None)
+@hydra.main(config_path='config', config_name='pretrain_trainer', version_base=None)
 def main(config):
     local_rank, rank, world_size = initialize_global_process_group()
 
