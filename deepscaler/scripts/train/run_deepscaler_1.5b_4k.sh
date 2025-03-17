@@ -23,12 +23,13 @@ if [ -z "$MODEL_PATH" ]; then
     MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 fi
 
-PROJECT_NAME='deepscaler'
+PROJECT_NAME='deepscaler_0.125perc'
 EXPERIMENT_NAME='deepscaler-1.5b-4k' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
+    data.train_ratio=0.125 \
     data.train_files=$HOME/data/deepscaler/train.parquet \
     data.val_files=$HOME/data/aime/test.parquet \
     data.train_batch_size=128 \
@@ -66,7 +67,7 @@ python3 -m verl.trainer.main_ppo \
     +trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
-    trainer.save_freq=100 \
+    trainer.save_freq=38 \
     trainer.test_freq=20 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \

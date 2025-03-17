@@ -1058,7 +1058,6 @@ class RayPPOTrainer(object):
                 else:
                     est_batch_var = np.mean([var for _, var in variance_list])
                     
-                
                 if self.config.active_strategy.var_threshold and est_batch_var < self.config.active_strategy.var_threshold:
                     print(f"Skipping generation for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
                     
