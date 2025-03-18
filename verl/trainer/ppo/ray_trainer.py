@@ -652,11 +652,66 @@ class RayPPOTrainer(object):
             row_data.extend(sample)
 
         new_table.add_data(*row_data)
-
         # Update reference and log
         wandb.log({"val/generations": new_table}, step=self.global_steps)
         self.validation_table = new_table
-
+        
+        
+    def compute_variance_and_visitcount(self, batch):
+        # Keep track of the variances chanege of all the prompts.
+        batch_indices = np.array(batch.non_tensor_batch['index'], dtype=object)
+        # Get unique indices and their first occurrence indices.
+        unique_ids, first_occurrence = np.unique(batch_indices, return_index=True)
+        var_est_error = 0
+        var_est_error_type1 = 0  # for type 1 error: if the gound trutch is 0 but predicted is not
+        var_est_error_type2 = 0 # for type 2 error: if the gound trutch is not 0 but predicted is 0
+        total_var = 0
+        for unique_id, i in zip(unique_ids, first_occurrence):
+            variance = (batch.batch['rewards_std'][i]) ** 2
+            var_est_error += np.absolute(variance-self.prev_variances[unique_id])/len(unique_ids)
+            if variance == 0 and self.prev_variances[unique_id] != 0:
+                var_est_error_type2 += 1
+            elif variance != 0 and self.prev_variances[unique_id] == 0:
+                var_est_error_type1 += 1
+            total_var += variance/len(unique_ids)
+            self.prev_variances[unique_id] = variance
+            self.visit_counts[unique_id] += 1
+            self.latest_reward_mean[unique_id] = batch.batch['rewards_mean'][i].item()
+            
+        return{
+            "est_var_error/mean": var_est_error,
+            "est_var_error/ratio": var_est_error/total_var,
+            "est_var_error/type1": var_est_error_type1,
+            "est_var_error/type2": var_est_error_type2,
+            }
+        
+    def _maybe_log_train_generations_to_wandb(self, batch, epoch, end_of_epoch=False):
+        """Log a table of training samples to wandb"""
+        # For a subset of tracked prompts, we also track their outputs texts
+        if batch is not None:
+            batch_indices = np.array(batch.non_tensor_batch['index'], dtype=object)
+            for i, raw_index in enumerate(batch_indices):
+                # For each tracked prompt, we only record a pair of 0/1 rewarded text
+                if raw_index in set(self.tracked_samples_idx):
+                    current_reward = batch.batch['token_level_scores'][i].sum(dim=-1)
+                    if current_reward in self.tracked_texts[raw_index]:
+                        continue
+                    output_id = batch.batch['responses'][i]
+                    output_text = self.tokenizer.decode(output_id, skip_special_tokens=True) 
+                    self.tracked_texts[raw_index][current_reward] = output_text
+                
+        if end_of_epoch:
+            columns = ["epoch"] + [f"prompt_{i}" for i in self.tracked_samples_idx]
+            if not hasattr(self, "train_table"):
+                self.train_table = wandb.Table(columns=columns)
+            new_table = wandb.Table(columns=columns, data=self.train_table.data)
+            row_data = [epoch]
+            for i in self.tracked_samples_idx:
+                row_data.append(self.tracked_texts[i])
+            new_table.add_row(row_data)
+            wandb.log({"train/generations": new_table}, step=self.global_steps)
+            self.train_table = new_table
+        
     def _validate(self):
         reward_tensor_lst = []
         data_source_lst = []
@@ -856,23 +911,10 @@ class RayPPOTrainer(object):
             f'global_step_{self.global_steps}', 
             'latest_rewards_mean.pt'
         )
-        tracked_variances_path = os.path.join(
-            self.config.trainer.default_local_dir, 
-            f'global_step_{self.global_steps}', 
-            'tracked_variances.pt'
-        )
-        tracked_rewards_mean_path = os.path.join(
-            self.config.trainer.default_local_dir, 
-            f'global_step_{self.global_steps}', 
-            'tracked_rewards_mean.pt'
-        )
-        
         
         torch.save(self.prev_variances, prev_variances_path)
         torch.save(self.visit_counts, visited_counts_path)
         torch.save(self.latest_reward_mean, latest_rewards_mean_path)
-        torch.save(self.tracked_variances, tracked_variances_path)
-        torch.save(self.tracked_rewards_mean, tracked_rewards_mean_path)
 
     def _load_checkpoint(self):
         if self.config.trainer.resume_mode == 'disable':
@@ -930,8 +972,6 @@ class RayPPOTrainer(object):
         prev_variances_path = os.path.join(global_step_folder, 'prev_variances.pt')
         visited_counts_path = os.path.join(global_step_folder, 'visited_counts.pt')
         latest_rewards_mean_path = os.path.join(global_step_folder, 'latest_rewards_mean.pt')
-        tracked_variances_path = os.path.join(global_step_folder, 'tracked_variances.pt')
-        tracked_rewards_mean_path = os.path.join(global_step_folder, 'tracked_rewards_mean.pt')
 
         if os.path.exists(prev_variances_path):
             self.prev_variances = torch.load(prev_variances_path)
@@ -945,14 +985,6 @@ class RayPPOTrainer(object):
             self.latest_reward_mean = torch.load(latest_rewards_mean_path)
         else:
             print("No latest_rewards_mean checkpoint found. Starting fresh.")
-        if os.path.exists(tracked_variances_path):
-            self.tracked_variances = torch.load(tracked_variances_path)
-        else:
-            print("No tracked_variances checkpoint found. Starting fresh.")
-        if os.path.exists(tracked_rewards_mean_path):
-            self.tracked_rewards_mean = torch.load(tracked_rewards_mean_path)
-        else:
-            print("No tracked_rewards_mean checkpoint found. Starting fresh.")
 
     def _balance_batch(self, batch: DataProto, metrics, logging_prefix='global_seqlen'):
         """Reorder the data on single controller such that each dp rank gets similar total tokens"""
@@ -1003,16 +1035,8 @@ class RayPPOTrainer(object):
 
         # Add a random sampled subset of the training dataset and track their variance
         num_tracked_samples = 200
+        np.random.seed(42)
         self.tracked_samples_idx = np.random.choice(self.train_dataset.get_all_prompt_ids(), num_tracked_samples, replace=False)
-        if self.return_rewards_std:
-            n_epochs = self.config.trainer.total_epochs
-            # Initialize with zeros for all epochs
-            self.tracked_variances = { 
-                idx: [None] * n_epochs for idx in self.tracked_samples_idx 
-            }
-            self.tracked_rewards_mean = {
-                idx: [None] * n_epochs for idx in self.tracked_samples_idx
-            }
 
         # Recording the previous variance
         if not self.prev_variances:
@@ -1020,6 +1044,10 @@ class RayPPOTrainer(object):
                 self.prev_variances[idx] = 0.25
 
         for epoch in range(self.config.trainer.total_epochs):
+            self.tracked_texts = {}
+            for idx in self.tracked_samples_idx:
+               self.tracked_texts[idx] = {}
+            
             for batch_idx, batch_dict in enumerate(self.train_dataloader):
                 # we start from step 1
                 self.global_steps += 1
@@ -1068,6 +1096,10 @@ class RayPPOTrainer(object):
                             val_metrics: dict = self._validate()
                         metrics.update(val_metrics)
                         
+                    # For a subset of tracked prompts, we also track their outputs texts
+                    self._maybe_log_train_generations_to_wandb(batch=None, epoch, end_of_epoch=batch_idx==len(self.train_dataloader)-1)
+                    
+                        
                     if batch_idx==len(self.train_dataloader)-1:
                         visit_counts = np.array(list(self.visit_counts.values()))
                         latest_reward_mean = np.array(list(self.latest_reward_mean.values()))
@@ -1078,7 +1110,9 @@ class RayPPOTrainer(object):
                                     "prompts/latest_reward_mean_median": np.median(latest_reward_mean),
                                     "prompts/latest_reward_mean_max": np.max(latest_reward_mean),
                                     "prompts/latest_reward_mean_min": np.min(latest_reward_mean),
-                                    "prompts/latest_reward_mean_std": np.std(latest_reward_mean)}, step=self.global_steps)
+                                    "prompts/latest_reward_mean_std": np.std(latest_reward_mean)})
+
+                    # log metrics
                     logger.log(data=metrics, step=self.global_steps)
 
                     if self.global_steps >= self.total_training_steps:
@@ -1233,53 +1267,11 @@ class RayPPOTrainer(object):
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
-
-                # track the variance of the tracked samples
-                batch_indices = np.array(batch.non_tensor_batch['index'], dtype=object)
-                # Get unique indices and their first occurrence indices.
-                unique_ids, first_occurrence = np.unique(batch_indices, return_index=True)
-                # Assuming self.tracked_samples_idx is a set (or convert it to a set for O(1) lookups)
-                tracked_samples = set(self.tracked_samples_idx)
-                # Loop only over unique IDs that are tracked
-                var_est_error, var_est_error_ratio = 0, 0
-                total_var = 0
-                for unique_id, i in zip(unique_ids, first_occurrence):
-                    variance = (batch.batch['rewards_std'][i]) ** 2
-                    var_est_error += np.absolute(variance-self.prev_variances[unique_id])/len(unique_ids)
-                    var_est_error_ratio +=np.absolute(variance-self.prev_variances[unique_id])/len(unique_ids)/np.absolute(variance)
-                    total_var += variance/len(unique_ids)
-                    self.prev_variances[unique_id] = variance
-                    self.visit_counts[unique_id] += 1
-                    self.latest_reward_mean[unique_id] = batch.batch['rewards_mean'][i].item()
-                    if unique_id in tracked_samples:
-                        rewards_mean = batch.batch['rewards_mean'][i]
-                        # print(f"The rewards variance of the tracked sample at epoch {unique_id} is: {variance}")
-                        # Optionally, store it in a dictionary:
-                        self.tracked_variances[unique_id][epoch] = variance.item()
-                        self.tracked_rewards_mean[unique_id][epoch] = rewards_mean.item()
-
-         
-        
-                metrics.update({
-                    "est_var_error/mean": var_est_error,
-                    "est_var_error/ratio_sep":var_est_error_ratio,
-                    "est_var_error/ratio": var_est_error/total_var
-                    })
+                metrics.update(self.compute_variance_and_visitcount(batch))
                 
+                # For a subset of tracked prompts, we also track their outputs texts
+                self._maybe_log_train_generations_to_wandb(batch, epoch,end_of_epoch=batch_idx==len(self.train_dataloader)-1)
                 
-
-                if self.return_rewards_std and 'wandb' in self.config.trainer.logger:
-                    # Save the variance of the tracked samples to a file
-
-                    # Create a table with columns: uid, and one column per epoch.
-                    # Here we assume all lists have the same length, e.g., n epochs.
-                    n_epochs = self.config.trainer.total_epochs
-                    columns = ["idx"] + [f"epoch{i}_var" for i in range(n_epochs)] + [f"epoch{i}_meanR" for i in range(n_epochs)]
-                    table = wandb.Table(columns=columns)
-                    for idx, variances in self.tracked_variances.items():
-                        row = [idx] + variances + self.tracked_rewards_mean[idx]
-                        table.add_data(*row)
-                    wandb.log({"tracked_variances_table": table})
                     
                 if batch_idx==len(self.train_dataloader)-1:
                     visit_counts = np.array(list(self.visit_counts.values()))
@@ -1291,7 +1283,7 @@ class RayPPOTrainer(object):
                                 "prompts/latest_reward_mean_median": np.median(latest_reward_mean),
                                 "prompts/latest_reward_mean_max": np.max(latest_reward_mean),
                                 "prompts/latest_reward_mean_min": np.min(latest_reward_mean),
-                                "prompts/latest_reward_mean_std": np.std(latest_reward_mean)}, step=self.global_steps)
+                                "prompts/latest_reward_mean_std": np.std(latest_reward_mean)})
                 logger.log(data=metrics, step=self.global_steps)
 
                 if self.global_steps >= self.total_training_steps:

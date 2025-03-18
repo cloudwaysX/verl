@@ -113,6 +113,7 @@ class RLHFDataset(Dataset):
         self.serialize_dataset = False
         self._download()
         self._read_files_and_tokenize(train_ratio)
+        self.set_all_prompt_ids()
 
     def _download(self, use_origin_parquet=False):
         from verl.utils.fs import copy_to_local
@@ -136,29 +137,24 @@ class RLHFDataset(Dataset):
         self.dataframe = self.dataframe[self.dataframe.apply(lambda doc: len(
             tokenizer.apply_chat_template(doc[prompt_key], add_generation_prompt=True)) <= self.max_prompt_length,
                                                              axis=1)]
-
         if train_ratio<1:
             size = int(len(self.dataframe)*train_ratio)
             print(f"[TEST only] select the first {size} for testing")
             self.dataframe = self.dataframe.head(size)
 
-        self.dataframe['offpolicy_rewards'] = [[] for _ in range(len(self.dataframe))]
-        self.dataframe['offpolicy_log_probs'] = [[] for _ in range(len(self.dataframe))]
-        self.dataframe['offpolicy_responses'] = [[] for _ in range(len(self.dataframe))]
-
-    def resume_dataset_state(self):
+    def resume_dataset_state(self,train_ratio=1):
         self.serialize_dataset = False if hasattr(self, 'original_parquet_files') else True
         # resume dataframe if not it's serialized in data.pt
         if not self.serialize_dataset:
             self._download(use_origin_parquet=True)  # download and resume from original parquet files
-            self._read_files_and_tokenize()
+            self._read_files_and_tokenize(train_ratio)
         else:
             print(r'old dataloader ckpt file is used, please train from scratch for better ckpt performance')
 
     def __len__(self):
         return len(self.dataframe)
     
-    def get_all_prompt_ids(self):
+    def _set_all_prompt_ids(self):
         # If 'extra_info' exists in the DataFrame, try to extract the 'index' from it.
         if 'extra_info' in self.dataframe.columns:
             # Apply a function to extract the index from extra_info if present.
@@ -173,13 +169,19 @@ class RLHFDataset(Dataset):
             indices = self.dataframe.apply(extract_index, axis=1)
             # If all rows have a valid index from extra_info, use them.
             if indices.notnull().all() and indices.is_unique:
-                return indices.tolist()
+                out = indices.tolist()
             else:
                 # Fallback: use the DataFrame's inherent index.
-                return self.dataframe.index.tolist()
+                out = self.dataframe.index.tolist()
         else:
             # Otherwise, just use the DataFrame's index.
-            return self.dataframe.index.tolist()
+            out = self.dataframe.index.tolist()
+            
+        self.rawindex2rowindex = {v: k for k, v in enumerate(out)}  
+        return out
+    
+    def get_all_prompt_ids(self):
+        return self.rawindex2rowindex.keys()
 
     def __getitem__(self, item):
         """
