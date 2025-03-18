@@ -710,7 +710,7 @@ class RayPPOTrainer(object):
             new_table = wandb.Table(columns=columns, data=self.train_table.data)
             row_data = [epoch]
             for i in self.tracked_samples_idx:
-                row_data.append(self.tracked_texts[i])
+                row_data.append(json.dumps(self.tracked_texts[i]))
             new_table.add_row(*row_data)
             wandb.log({"train/generations": new_table}, step=self.global_steps)
             self.train_table = new_table
