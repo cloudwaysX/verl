@@ -694,6 +694,8 @@ class RayPPOTrainer(object):
                 # For each tracked prompt, we only record a pair of 0/1 rewarded text
                 if raw_index in set(self.tracked_samples_idx):
                     current_reward = batch.batch['token_level_scores'][i].sum(dim=-1)
+                    if "prompt" not in self.tracked_texts[raw_index]:
+                        self.tracked_texts[raw_index]["prompt"] = self.tokenizer.decode(batch.batch['raw_prompt_ids'][i], skip_special_tokens=True)
                     if current_reward in self.tracked_texts[raw_index]:
                         continue
                     output_id = batch.batch['responses'][i]
@@ -701,6 +703,7 @@ class RayPPOTrainer(object):
                     self.tracked_texts[raw_index][current_reward] = output_text
                 
         if end_of_epoch:
+            print(f"Logging train generations to wandb for epoch {epoch}")
             columns = ["epoch"] + [f"prompt_{i}" for i in self.tracked_samples_idx]
             if not hasattr(self, "train_table"):
                 self.train_table = wandb.Table(columns=columns)
@@ -708,7 +711,7 @@ class RayPPOTrainer(object):
             row_data = [epoch]
             for i in self.tracked_samples_idx:
                 row_data.append(self.tracked_texts[i])
-            new_table.add_row(row_data)
+            new_table.add_row(*row_data)
             wandb.log({"train/generations": new_table}, step=self.global_steps)
             self.train_table = new_table
         
