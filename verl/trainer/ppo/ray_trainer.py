@@ -1097,7 +1097,7 @@ class RayPPOTrainer(object):
                         metrics.update(val_metrics)
                         
                     # For a subset of tracked prompts, we also track their outputs texts
-                    self._maybe_log_train_generations_to_wandb(batch=None, epoch, end_of_epoch=batch_idx==len(self.train_dataloader)-1)
+                    self._maybe_log_train_generations_to_wandb(batch=None, epoch=epoch, end_of_epoch=batch_idx==len(self.train_dataloader)-1)
                     
                         
                     if batch_idx==len(self.train_dataloader)-1:
@@ -1270,7 +1270,7 @@ class RayPPOTrainer(object):
                 metrics.update(self.compute_variance_and_visitcount(batch))
                 
                 # For a subset of tracked prompts, we also track their outputs texts
-                self._maybe_log_train_generations_to_wandb(batch, epoch,end_of_epoch=batch_idx==len(self.train_dataloader)-1)
+                self._maybe_log_train_generations_to_wandb(batch, epoch, end_of_epoch=batch_idx==len(self.train_dataloader)-1)
                 
                     
                 if batch_idx==len(self.train_dataloader)-1:

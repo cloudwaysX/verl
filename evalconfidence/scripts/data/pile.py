@@ -48,7 +48,7 @@ def main():
     )
     
     # Save the processed dataset to a JSON Lines file.
-    local_path = os.path.join(local_dir, f"{args.split}.parquet")
+    local_path = os.path.join(local_dir, f"{args.split}_{args.train_ratio}perc.parquet")
     processed_dataset.to_parquet(local_path)
     print(f"Saved processed {args.split} split to {local_path}")
     

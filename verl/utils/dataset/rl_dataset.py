@@ -113,7 +113,7 @@ class RLHFDataset(Dataset):
         self.serialize_dataset = False
         self._download()
         self._read_files_and_tokenize(train_ratio)
-        self.set_all_prompt_ids()
+        self._set_all_prompt_ids()
 
     def _download(self, use_origin_parquet=False):
         from verl.utils.fs import copy_to_local
@@ -181,7 +181,7 @@ class RLHFDataset(Dataset):
         return out
     
     def get_all_prompt_ids(self):
-        return self.rawindex2rowindex.keys()
+        return list(self.rawindex2rowindex.keys())
 
     def __getitem__(self, item):
         """
@@ -251,11 +251,6 @@ class RLHFDataset(Dataset):
             row_dict["index"] = row_dict["extra_info"]["index"]
         else:
             row_dict["index"] = self.dataframe.index[item]
-
-        # Add offpolicy data used for estimation
-        # row_dict['offpolicy_rewards'] = row_dict.get('offpolicy_rewards', [])
-        # row_dict['offpolicy_log_probs'] = row_dict.get('offpolicy_log_probs', [])
-        # row_dict['offpolicy_responses'] = row_dict.get('offpolicy_responses', [])
 
         return row_dict
 
