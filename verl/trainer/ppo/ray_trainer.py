@@ -693,7 +693,7 @@ class RayPPOTrainer(object):
             for i, raw_index in enumerate(batch_indices):
                 # For each tracked prompt, we only record a pair of 0/1 rewarded text
                 if raw_index in set(self.tracked_samples_idx):
-                    current_reward = batch.batch['token_level_scores'][i].sum(dim=-1)
+                    current_reward = batch.batch['token_level_scores'][i].sum(dim=-1).item()
                     if current_reward in self.tracked_texts[raw_index]:
                         continue
                     output_id = batch.batch['responses'][i]
@@ -707,8 +707,8 @@ class RayPPOTrainer(object):
             new_table = wandb.Table(columns=columns, data=self.train_table.data)
             row_data = [epoch]
             for i in self.tracked_samples_idx:
-                row_data.append(self.tracked_texts[i])
-            new_table.add_row(row_data)
+                row_data.append(json.dumps(self.tracked_texts[i]))
+            new_table.add_row(*row_data)
             wandb.log({"train/generations": new_table}, step=self.global_steps)
             self.train_table = new_table
         
