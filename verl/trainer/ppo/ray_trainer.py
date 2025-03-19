@@ -1106,6 +1106,7 @@ class RayPPOTrainer(object):
                     if batch_idx==len(self.train_dataloader)-1:
                         visit_counts = np.array(list(self.visit_counts.values()))
                         latest_reward_mean = np.array(list(self.latest_reward_mean.values()))
+                        prev_variances = np.array(list(self.prev_variances.values()))
                         metrics.update({"prompts/visit_counts_median": np.median(visit_counts),
                                     "prompts/visit_counts_max": np.max(visit_counts),
                                     "prompts/visit_counts_min": np.min(visit_counts),
@@ -1113,9 +1114,9 @@ class RayPPOTrainer(object):
                                     "prompts/latest_reward_mean_median": np.median(latest_reward_mean),
                                     "prompts/latest_reward_mean_mean": np.mean(latest_reward_mean),
                                     "prompts/latest_reward_mean_std": np.std(latest_reward_mean),
-                                    "prompts/variance_mean": np.mean(self.prev_variances),
-                                    "prompts/variance_std": np.std(self.prev_variances),
-                                    "prompts/variance_median": np.median(self.prev_variances)})
+                                    "prompts/variance_mean": np.mean(prev_variances),
+                                    "prompts/variance_std": np.std(prev_variances),
+                                    "prompts/variance_median": np.median(prev_variances)})
 
                     # log metrics
                     logger.log(data=metrics, step=self.global_steps)

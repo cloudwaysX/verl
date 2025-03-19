@@ -250,9 +250,15 @@ class ActorRolloutRefWorker(Worker):
         fsdp_mesh = self.device_mesh
         sharding_strategy = get_sharding_strategy(fsdp_mesh)
 
-        for name, p in actor_module.named_parameters():
-            if 'attn' in name:
-                p.requires_grad = False
+        if self.config.actor.get('freeze_attn', False):
+            for name, p in actor_module.named_parameters():
+                if 'attn' in name:
+                    p.requires_grad = False
+        
+        if self.config.actor.get('freeze_mlp', False):
+            for name, p in actor_module.named_parameters():
+                if 'mlp' in name:
+                    p.requires_grad = False
 
         # TODO: add transformer policy
         # We force reference policy to use CPUOffload to save memory.
@@ -262,7 +268,8 @@ class ActorRolloutRefWorker(Worker):
             actor_module,
             cpu_offload=cpu_offload,
             param_init_fn=init_fn,
-            use_orig_params=True, # default: False, I changed it for freezing weights
+            # use_orig_params=True, # default: False, I changed it for freezing weights
+            use_orig_params=False,
             auto_wrap_policy=auto_wrap_policy,
             device_id=torch.cuda.current_device(),
             sharding_strategy=sharding_strategy,  # zero3

@@ -55,16 +55,6 @@ class DataParallelPPOActor(BasePPOActor):
 
         self.compute_entropy_from_logits = torch.compile(verl_F.entropy_from_logits, dynamic=True)
         
-    def freeze_attn_params(self, unfreeze_attn=False):
-        for name, param in self.actor_module.module.named_parameters():
-            print("actor param name", name, param.size())
-            if 'attn' in name:
-                param.requires_grad = True if unfreeze_attn else False
-                
-    def freeze_mlp_params(self, unfreeze_mlp=False):
-        for name, param in self.actor_module.module.named_parameters():
-            if 'mlp' in name:
-                param.requires_grad = True if unfreeze_mlp else False
 
     def _forward_micro_batch(self, micro_batch, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
         """
