@@ -14,9 +14,9 @@ data:
   train_ratio: 1
 
 active_strategy: 
-  var_threshold: null
   strategy_type: null
-  exploration_ratio: 0.0
+  greedy_exploration_ratio: 0.0
+  greedy_top_percent: 0.0
 
 actor_rollout_ref:
   hybrid_engine: True

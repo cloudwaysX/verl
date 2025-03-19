@@ -1069,12 +1069,25 @@ class RayPPOTrainer(object):
                     if idx not in self.latest_reward_mean:
                         self.latest_reward_mean[idx] = 0
     
-                # Sort the indices by variance in descending order
+                # Sort the indices by the selection metric (either variance or reward) in descending order
+                list_to_sort = None
                 variance_list = [(idx, self.prev_variances[idx]) for idx in index]
                 variance_list.sort(key=lambda x: x[1], reverse=True)
+                reward_list = [(idx, self.latest_reward_mean[idx]) for idx in index]
+                reward_list.sort(key=lambda x: x[1], reverse=True)
+                if self.config.selection_metric == "variance":
+                    list_to_sort = variance_list
+                elif self.config.selection_metric == "reward":
+                    list_to_sort = reward_list
+                elif self.config.active_strategy.strategy_type == "greedy":
+                    raise ValueError(f"Unsupported selection metric: {self.config.selection_metric}")
+                
+                # Select the 50% indices starting from the top 50% indices
+                assert self.config.active_strategy.greedy_top_percent > 0 and self.config.active_strategy.greedy_top_percent < 0.5, "greedy_top_percent must be between 0 and 0.5"
+                start_po = int(self.config.active_strategy.greedy_top_percent*len(index))
 
                 # Select the top 50% indices
-                if self.config.active_strategy.strategy_type and self.config.active_strategy.strategy_type == "greedy":
+                if self.config.active_strategy.strategy_type == "greedy":
                     p = random.random()
                     if p < self.config.active_strategy.greedy_exploration_ratio:
                         print(f"With probability {self.config.active_strategy.greedy_exploration_ratio}, randomly select the 50%.")
@@ -1082,60 +1095,18 @@ class RayPPOTrainer(object):
                     else:
                         # Update the batch to keep only selected top 50% indices
                         print(f"With probability {1-self.config.active_strategy.greedy_exploration_ratio}, select the top 50%.")
-                        selected_indices = set(idx for idx, _ in variance_list[:len(variance_list)//2])
+                        selected_indices = set(idx for idx, _ in list_to_sort[start_po:start_po+len(list_to_sort)//2])
                     selected_inbatch_idx = [i for i, idx in enumerate(index) if idx in selected_indices]
                     batch.reorder(torch.tensor(selected_inbatch_idx))
-                    est_batch_var = np.mean([var for _, var in variance_list[:len(variance_list)//2]])
-                else:
-                    est_batch_var = np.mean([var for _, var in variance_list])
-                    
-                if self.config.active_strategy.var_threshold and est_batch_var < self.config.active_strategy.var_threshold:
-                    print(f"Skipping generation for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
-                    
-                    # validate
-                    if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and \
-                        self.global_steps % self.config.trainer.test_freq == 0:
-                        with _timer('testing', timing_raw):
-                            val_metrics: dict = self._validate()
-                        metrics.update(val_metrics)
-                        
-                    # For a subset of tracked prompts, we also track their outputs texts
-                    self._maybe_log_train_generations_to_wandb(batch=None, epoch=epoch, end_of_epoch=batch_idx==len(self.train_dataloader)-1)
-                    
-                        
-                    if batch_idx==len(self.train_dataloader)-1:
-                        visit_counts = np.array(list(self.visit_counts.values()))
-                        latest_reward_mean = np.array(list(self.latest_reward_mean.values()))
-                        prev_variances = np.array(list(self.prev_variances.values()))
-                        metrics.update({"prompts/visit_counts_median": np.median(visit_counts),
-                                    "prompts/visit_counts_max": np.max(visit_counts),
-                                    "prompts/visit_counts_min": np.min(visit_counts),
-                                    "prompts/visit_counts_std": np.std(visit_counts),
-                                    "prompts/latest_reward_mean_median": np.median(latest_reward_mean),
-                                    "prompts/latest_reward_mean_mean": np.mean(latest_reward_mean),
-                                    "prompts/latest_reward_mean_std": np.std(latest_reward_mean),
-                                    "prompts/variance_mean": np.mean(prev_variances),
-                                    "prompts/variance_std": np.std(prev_variances),
-                                    "prompts/variance_median": np.median(prev_variances)})
+                    est_batch_selection_metric = np.mean([var for _, var in list_to_sort[:len(list_to_sort)//2]])
+                    if self.config.active_strategy.metric_type == "variance":
+                        est_batch_var = est_batch_selection_metric
+                        print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
+                    elif self.config.active_strategy.metric_type == "reward":
+                        est_batch_reward = est_batch_selection_metric
+                        print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated reward is {est_batch_reward}")
 
-                    # log metrics
-                    logger.log(data=metrics, step=self.global_steps)
 
-                    if self.global_steps >= self.total_training_steps:
-                        # perform validation after training
-                        if self.val_reward_fn is not None:
-                            val_metrics = self._validate()
-                            pprint(f'Final validation metrics: {val_metrics}')
-                            logger.log(data=val_metrics, step=self.global_steps)
-                        if self.config.trainer.save_freq > 0 and \
-                                (self.global_steps - 1) % self.config.trainer.save_freq != 0:
-                            with _timer('save_checkpoint', timing_raw):
-                                self._save_checkpoint()
-                        
-                        return
-                    continue
-
-                print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
 
                 # pop those keys for generation
                 if 'multi_modal_inputs' in batch.non_tensor_batch.keys():
