@@ -250,6 +250,10 @@ class ActorRolloutRefWorker(Worker):
         fsdp_mesh = self.device_mesh
         sharding_strategy = get_sharding_strategy(fsdp_mesh)
 
+        for name, p in actor_module.named_parameters():
+            if 'attn' in name:
+                p.requires_grad = False
+
         # TODO: add transformer policy
         # We force reference policy to use CPUOffload to save memory.
         # We force turn off CPUOffload for actor because it causes incorrect results when using grad accumulation
@@ -258,7 +262,7 @@ class ActorRolloutRefWorker(Worker):
             actor_module,
             cpu_offload=cpu_offload,
             param_init_fn=init_fn,
-            use_orig_params=False,
+            use_orig_params=True, # default: False, I changed it for freezing weights
             auto_wrap_policy=auto_wrap_policy,
             device_id=torch.cuda.current_device(),
             sharding_strategy=sharding_strategy,  # zero3
@@ -269,9 +273,13 @@ class ActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('After Actor FSDP init', logger=logger)
 
+        # print([n for n,p in actor_module_fsdp.named_parameters()])
+        # assert False
+
         # TODO: add more optimizer args into config
         if role == 'actor':
             from verl.utils.torch_functional import get_constant_schedule_with_warmup
+
             actor_optimizer = optim.AdamW(actor_module_fsdp.parameters(),
                                           lr=optim_config.lr,
                                           betas=optim_config.get('betas', (0.9, 0.999)),
@@ -385,10 +393,10 @@ class ActorRolloutRefWorker(Worker):
             self.actor = DataParallelPPOActor(config=self.config.actor,
                                               actor_module=self.actor_module_fsdp,
                                               actor_optimizer=self.actor_optimizer)
-            if self.config.actor.get('freeze_attn', False):
-                self.actor.freeze_attn_params()
-            if self.config.actor.get('freeze_mlp', False):
-                self.actor.freeze_mlp_params()
+           # if self.config.actor.get('freeze_attn', False):
+               # self.actor.freeze_attn_params()
+           # if self.config.actor.get('freeze_mlp', False):
+               # self.actor.freeze_mlp_params()
 
         if self._is_rollout:
             self.rollout, self.rollout_sharding_manager = self._build_rollout()

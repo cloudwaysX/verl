@@ -693,7 +693,7 @@ class RayPPOTrainer(object):
             for i, raw_index in enumerate(batch_indices):
                 # For each tracked prompt, we only record a pair of 0/1 rewarded text
                 if raw_index in set(self.tracked_samples_idx):
-                    current_reward = batch.batch['token_level_scores'][i].sum(dim=-1)
+                    current_reward = batch.batch['token_level_scores'][i].sum(dim=-1).item()
                     if "prompt" not in self.tracked_texts[raw_index]:
                         self.tracked_texts[raw_index]["prompt"] = self.tokenizer.decode(batch.batch['input_ids'][i], skip_special_tokens=True)
                     if current_reward in self.tracked_texts[raw_index]:
