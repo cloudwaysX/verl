@@ -695,7 +695,7 @@ class RayPPOTrainer(object):
                 if raw_index in set(self.tracked_samples_idx):
                     current_reward = batch.batch['token_level_scores'][i].sum(dim=-1)
                     if "prompt" not in self.tracked_texts[raw_index]:
-                        self.tracked_texts[raw_index]["prompt"] = self.tokenizer.decode(batch.batch['raw_prompt_ids'][i], skip_special_tokens=True)
+                        self.tracked_texts[raw_index]["prompt"] = self.tokenizer.decode(batch.batch['input_ids'][i], skip_special_tokens=True)
                     if current_reward in self.tracked_texts[raw_index]:
                         continue
                     output_id = batch.batch['responses'][i]
@@ -1111,9 +1111,11 @@ class RayPPOTrainer(object):
                                     "prompts/visit_counts_min": np.min(visit_counts),
                                     "prompts/visit_counts_std": np.std(visit_counts),
                                     "prompts/latest_reward_mean_median": np.median(latest_reward_mean),
-                                    "prompts/latest_reward_mean_max": np.max(latest_reward_mean),
-                                    "prompts/latest_reward_mean_min": np.min(latest_reward_mean),
-                                    "prompts/latest_reward_mean_std": np.std(latest_reward_mean)})
+                                    "prompts/latest_reward_mean_mean": np.mean(latest_reward_mean),
+                                    "prompts/latest_reward_mean_std": np.std(latest_reward_mean),
+                                    "prompts/variance_mean": np.mean(self.prev_variances),
+                                    "prompts/variance_std": np.std(self.prev_variances),
+                                    "prompts/variance_median": np.median(self.prev_variances)})
 
                     # log metrics
                     logger.log(data=metrics, step=self.global_steps)
@@ -1284,9 +1286,11 @@ class RayPPOTrainer(object):
                                 "prompts/visit_counts_min": np.min(visit_counts),
                                 "prompts/visit_counts_std": np.std(visit_counts),
                                 "prompts/latest_reward_mean_median": np.median(latest_reward_mean),
-                                "prompts/latest_reward_mean_max": np.max(latest_reward_mean),
-                                "prompts/latest_reward_mean_min": np.min(latest_reward_mean),
-                                "prompts/latest_reward_mean_std": np.std(latest_reward_mean)})
+                                "prompts/latest_reward_mean_mean": np.mean(latest_reward_mean),
+                                "prompts/latest_reward_mean_std": np.std(latest_reward_mean),
+                                "prompts/variance_mean": np.mean(self.prev_variances),
+                                "prompts/variance_std": np.std(self.prev_variances),
+                                "prompts/variance_median": np.median(self.prev_variances)})
                 logger.log(data=metrics, step=self.global_steps)
 
                 if self.global_steps >= self.total_training_steps:

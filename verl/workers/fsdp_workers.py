@@ -385,6 +385,10 @@ class ActorRolloutRefWorker(Worker):
             self.actor = DataParallelPPOActor(config=self.config.actor,
                                               actor_module=self.actor_module_fsdp,
                                               actor_optimizer=self.actor_optimizer)
+            if self.config.actor.get('freeze_attn', False):
+                self.actor.freeze_attn_params()
+            if self.config.actor.get('freeze_mlp', False):
+                self.actor.freeze_mlp_params()
 
         if self._is_rollout:
             self.rollout, self.rollout_sharding_manager = self._build_rollout()

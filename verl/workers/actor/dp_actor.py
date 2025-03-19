@@ -54,6 +54,16 @@ class DataParallelPPOActor(BasePPOActor):
         self.use_ulysses_sp = self.ulysses_sequence_parallel_size > 1
 
         self.compute_entropy_from_logits = torch.compile(verl_F.entropy_from_logits, dynamic=True)
+        
+    def freeze_attn_params(self, unfreeze_attn=False):
+        for name, param in self.actor_module.named_parameters():
+            if 'mlp' not in name:
+                param.requires_grad = True if unfreeze_attn else False
+                
+    def freeze_mlp_params(self, unfreeze_mlp=False):
+        for name, param in self.actor_module.named_parameters():
+            if 'mlp' in name:
+                param.requires_grad = True if unfreeze_mlp else False
 
     def _forward_micro_batch(self, micro_batch, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
         """
