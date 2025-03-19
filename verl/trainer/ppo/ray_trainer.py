@@ -553,10 +553,9 @@ class RayPPOTrainer(object):
             sampler = SequentialSampler(data_source=self.train_dataset)
 
 
-        if self.config.active_strategy.strategy_type and self.config.active_strategy.strategy_type=="greedy":
+        if self.config.active_strategy.strategy_type=="greedy":
             batch_size = self.config.data.train_batch_size * 2
-            self.config.active_strategy.var_threshold=None
-            print(f"Ignoring the variance threshold when setting active strategy to greedy")
+            # print(f"Ignoring the variance threshold when setting active strategy to greedy")
         else:
             batch_size = self.config.data.train_batch_size
         self.train_dataloader = StatefulDataLoader(dataset=self.train_dataset,
@@ -1075,9 +1074,9 @@ class RayPPOTrainer(object):
                 variance_list.sort(key=lambda x: x[1], reverse=True)
                 reward_list = [(idx, self.latest_reward_mean[idx]) for idx in index]
                 reward_list.sort(key=lambda x: x[1], reverse=True)
-                if self.config.selection_metric == "variance":
+                if self.config.active_strategy.selection_metric == "variance":
                     list_to_sort = variance_list
-                elif self.config.selection_metric == "reward":
+                elif self.config.active_strategy.selection_metric == "reward":
                     list_to_sort = reward_list
                 elif self.config.active_strategy.strategy_type == "greedy":
                     raise ValueError(f"Unsupported selection metric: {self.config.selection_metric}")
@@ -1099,10 +1098,10 @@ class RayPPOTrainer(object):
                     selected_inbatch_idx = [i for i, idx in enumerate(index) if idx in selected_indices]
                     batch.reorder(torch.tensor(selected_inbatch_idx))
                     est_batch_selection_metric = np.mean([var for _, var in list_to_sort[:len(list_to_sort)//2]])
-                    if self.config.active_strategy.metric_type == "variance":
+                    if self.config.active_strategy.selection_metric == "variance":
                         est_batch_var = est_batch_selection_metric
                         print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
-                    elif self.config.active_strategy.metric_type == "reward":
+                    elif self.config.active_strategy.selection_metric == "reward":
                         est_batch_reward = est_batch_selection_metric
                         print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated reward is {est_batch_reward}")
 
@@ -1253,6 +1252,7 @@ class RayPPOTrainer(object):
                 if batch_idx==len(self.train_dataloader)-1:
                     visit_counts = np.array(list(self.visit_counts.values()))
                     latest_reward_mean = np.array(list(self.latest_reward_mean.values()))
+                    prev_variances = np.array(list(self.prev_variances.values()))
                     metrics.update({"prompts/visit_counts_median": np.median(visit_counts),
                                 "prompts/visit_counts_max": np.max(visit_counts),
                                 "prompts/visit_counts_min": np.min(visit_counts),
@@ -1260,9 +1260,9 @@ class RayPPOTrainer(object):
                                 "prompts/latest_reward_mean_median": np.median(latest_reward_mean),
                                 "prompts/latest_reward_mean_mean": np.mean(latest_reward_mean),
                                 "prompts/latest_reward_mean_std": np.std(latest_reward_mean),
-                                "prompts/variance_mean": np.mean(self.prev_variances),
-                                "prompts/variance_std": np.std(self.prev_variances),
-                                "prompts/variance_median": np.median(self.prev_variances)})
+                                "prompts/variance_mean": np.mean(prev_variances),
+                                "prompts/variance_std": np.std(prev_variances),
+                                "prompts/variance_median": np.median(prev_variances)})
                 logger.log(data=metrics, step=self.global_steps)
 
                 if self.global_steps >= self.total_training_steps:
