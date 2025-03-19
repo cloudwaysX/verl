@@ -661,10 +661,10 @@ class RayPPOTrainer(object):
         batch_indices = np.array(batch.non_tensor_batch['index'], dtype=object)
         # Get unique indices and their first occurrence indices.
         unique_ids, first_occurrence = np.unique(batch_indices, return_index=True)
-        var_est_error = 0
+        var_est_error, rewardmean_est_error = 0
         var_est_error_type1 = 0  # for type 1 error: if the gound trutch is 0 but predicted is not
         var_est_error_type2 = 0 # for type 2 error: if the gound trutch is not 0 but predicted is 0
-        total_var = 0
+        total_var, total_rewardmean = 0
         for unique_id, i in zip(unique_ids, first_occurrence):
             variance = (batch.batch['rewards_std'][i]) ** 2
             var_est_error += np.absolute(variance-self.prev_variances[unique_id])/len(unique_ids)
@@ -676,12 +676,16 @@ class RayPPOTrainer(object):
             self.prev_variances[unique_id] = variance
             self.visit_counts[unique_id] += 1
             self.latest_reward_mean[unique_id] = batch.batch['rewards_mean'][i].item()
+            rewardmean_est_error += np.absolute(self.latest_reward_mean[unique_id]-self.latest_reward_mean[unique_id])/len(unique_ids)
+            total_rewardmean += np.absolute(self.latest_reward_mean[unique_id])/len(unique_ids)
             
         return{
             "est_var_error/mean": var_est_error,
             "est_var_error/ratio": var_est_error/total_var,
             "est_var_error/type1": var_est_error_type1,
             "est_var_error/type2": var_est_error_type2,
+            "est_rewardmean_error/mean": rewardmean_est_error,
+            "est_rewardmean_error/ratio": rewardmean_est_error/total_rewardmean
             }
         
     def _maybe_log_train_generations_to_wandb(self, batch, epoch, end_of_epoch=False):

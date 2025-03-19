@@ -24,14 +24,14 @@ if [ -z "$MODEL_PATH" ]; then
 fi
 
 PROJECT_NAME='deepscaler_0.125perc'
-EXPERIMENT_NAME='deepscaler-1.5b-4k_greedy_v2' 
+EXPERIMENT_NAME='deepscaler-1.5b-4k_greedytop15' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_ratio=0.125 \
     data.train_files=$HOME/data/deepscaler/train.parquet \
-    data.val_files=$HOME/data/aime/test.parquet \
+    data.val_files=[$HOME/data/aime/test.parquet,$HOME/data/amc/test.parquet,$HOME/data/math/test.parquet]\
     data.train_batch_size=128 \
     data.val_batch_size=512 \
     data.max_prompt_length=1024 \
@@ -73,5 +73,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
     trainer.total_epochs=30 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
-    active_strategy.var_threshold=null \
-    active_strategy.strategy_type="greedy"
+    active_strategy.strategy_type="greedy" \
+    active_strategy.greedy_exploration_ratio=0.0 \
+    active_strategy.greedy_top_percent=0.15 \
+    active_strategy.selection_metric="variance" \
