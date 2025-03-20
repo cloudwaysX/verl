@@ -441,7 +441,7 @@ class RayPPOTrainer(object):
         self._validate_config()
         self._create_dataloader()
 
-        # Track variance
+        # Track latest stats for each unique prompt
         self.return_rewards_std = True
         self.prev_variances = {}
         self.visit_counts = {} # Store the number of visits for each unique samples
@@ -1094,6 +1094,9 @@ class RayPPOTrainer(object):
                     p = random.random()
                     if p < self.config.active_strategy.greedy_exploration_ratio:
                         print(f"With probability {self.config.active_strategy.greedy_exploration_ratio}, randomly select the 50%.")
+                        selected_indices = set(random.sample(index, len(index)//2))
+                    elif epoch == 0 or epoch == 1:
+                        print("At the first two epochs, randomly select the 50%.")
                         selected_indices = set(random.sample(index, len(index)//2))
                     else:
                         # Update the batch to keep only selected top 50% indices
