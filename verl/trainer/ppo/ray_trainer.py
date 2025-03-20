@@ -446,6 +446,7 @@ class RayPPOTrainer(object):
         self.prev_variances = {}
         self.visit_counts = {} # Store the number of visits for each unique samples
         self.latest_reward_mean = {} # Store the latest reward mean for each unique samples
+        self.latest_clippedans_mean = {} # Store the latest clipped answer mean for each unique samples
 
 
     def _validate_config(self):
@@ -657,7 +658,7 @@ class RayPPOTrainer(object):
         
         
     def compute_variance_and_visitcount(self, batch):
-        # Keep track of the variances chanege of all the prompts.
+        # Keep track of the stats chanege of all the prompts.
         batch_indices = np.array(batch.non_tensor_batch['index'], dtype=object)
         # Get unique indices and their first occurrence indices.
         unique_ids, first_occurrence = np.unique(batch_indices, return_index=True)
@@ -666,6 +667,7 @@ class RayPPOTrainer(object):
         var_est_error_type2 = 0 # for type 2 error: if the gound trutch is not 0 but predicted is 0
         total_var, total_rewardmean = 0, 0
         for unique_id, i in zip(unique_ids, first_occurrence):
+            # track the variance of the rewards
             variance = (batch.batch['rewards_std'][i]) ** 2
             var_est_error += np.absolute(variance-self.prev_variances[unique_id])/len(unique_ids)
             if variance == 0 and self.prev_variances[unique_id] != 0:
@@ -674,10 +676,22 @@ class RayPPOTrainer(object):
                 var_est_error_type1 += 1
             total_var += variance/len(unique_ids)
             self.prev_variances[unique_id] = variance
+            # track the visit counts
             self.visit_counts[unique_id] += 1
+            # track the reward mean
+            rewardmean_est_error += np.absolute(batch.batch['rewards_mean'][i].item()-self.latest_reward_mean[unique_id])/len(unique_ids)
             self.latest_reward_mean[unique_id] = batch.batch['rewards_mean'][i].item()
-            rewardmean_est_error += np.absolute(self.latest_reward_mean[unique_id]-self.latest_reward_mean[unique_id])/len(unique_ids)
             total_rewardmean += np.absolute(self.latest_reward_mean[unique_id])/len(unique_ids)
+         
+        total_clipppedans_mean = 0
+        clippedansmean_est_error = 0
+        tmp_latest_clippedans_mean = defaultdict(list) 
+        for i, unique_id in batch_indices:
+            tmp_latest_clippedans_mean[unique_id].append(torch.eq(len(batch.batch[i]["responses"]), self.config.data.max_response_length))
+        for unique_id, clipped_an_mean in tmp_latest_clippedans_mean.items():
+            clippedansmean_est_error += np.absolute(self.latest_clippedans_mean[unique_id]-np.mean(clipped_an_mean))/len(unique_ids)
+            self.latest_clippedans_mean[unique_id] = np.mean(clipped_an_mean)
+            total_clipppedans_mean += np.absolute(self.latest_clippedans_mean[unique_id])/len(unique_ids)
             
         return{
             "est_var_error/mean": var_est_error,
@@ -685,7 +699,9 @@ class RayPPOTrainer(object):
             "est_var_error/type1": var_est_error_type1,
             "est_var_error/type2": var_est_error_type2,
             "est_rewardmean_error/mean": rewardmean_est_error,
-            "est_rewardmean_error/ratio": rewardmean_est_error/total_rewardmean
+            "est_rewardmean_error/ratio": rewardmean_est_error/total_rewardmean,
+            "est_clippedansmean_error/mean": clippedansmean_est_error,
+            "est_clippedansmean_error/ratio": clippedansmean_est_error/total_clipppedans_mean,
             }
         
     def _maybe_log_train_generations_to_wandb(self, batch, epoch, end_of_epoch=False):
@@ -917,10 +933,16 @@ class RayPPOTrainer(object):
             f'global_step_{self.global_steps}', 
             'latest_rewards_mean.pt'
         )
+        latest_clippedans_mean_path = os.path.join(
+            self.config.trainer.default_local_dir, 
+            f'global_step_{self.global_steps}', 
+            'latest_clippedans_mean.pt'
+        )
         
         torch.save(self.prev_variances, prev_variances_path)
         torch.save(self.visit_counts, visited_counts_path)
         torch.save(self.latest_reward_mean, latest_rewards_mean_path)
+        torch.save(self.latest_clippedans_mean, latest_clippedans_mean_path)
 
     def _load_checkpoint(self):
         if self.config.trainer.resume_mode == 'disable':
@@ -978,6 +1000,7 @@ class RayPPOTrainer(object):
         prev_variances_path = os.path.join(global_step_folder, 'prev_variances.pt')
         visited_counts_path = os.path.join(global_step_folder, 'visited_counts.pt')
         latest_rewards_mean_path = os.path.join(global_step_folder, 'latest_rewards_mean.pt')
+        latest_clippedans_mean_path = os.path.join(global_step_folder, 'latest_clippedans_mean.pt')
 
         if os.path.exists(prev_variances_path):
             self.prev_variances = torch.load(prev_variances_path)
@@ -991,6 +1014,10 @@ class RayPPOTrainer(object):
             self.latest_reward_mean = torch.load(latest_rewards_mean_path)
         else:
             print("No latest_rewards_mean checkpoint found. Starting fresh.")
+        if os.path.exists(latest_clippedans_mean_path):
+            self.latest_clippedans_mean = torch.load(latest_clippedans_mean_path)
+        else:
+            print("No latest_clippedans_mean checkpoint found. Starting fresh.")
 
     def _balance_batch(self, batch: DataProto, metrics, logging_prefix='global_seqlen'):
         """Reorder the data on single controller such that each dp rank gets similar total tokens"""
@@ -1260,6 +1287,7 @@ class RayPPOTrainer(object):
                     visit_counts = np.array(list(self.visit_counts.values()))
                     latest_reward_mean = np.array(list(self.latest_reward_mean.values()))
                     prev_variances = np.array(list(self.prev_variances.values()))
+                    latest_clippedans_mean = np.array(list(self.latest_clippedans_mean.values()))
                     metrics.update({"prompts/visit_counts_median": np.median(visit_counts),
                                 "prompts/visit_counts_max": np.max(visit_counts),
                                 "prompts/visit_counts_min": np.min(visit_counts),
@@ -1269,7 +1297,10 @@ class RayPPOTrainer(object):
                                 "prompts/latest_reward_mean_std": np.std(latest_reward_mean),
                                 "prompts/variance_mean": np.mean(prev_variances),
                                 "prompts/variance_std": np.std(prev_variances),
-                                "prompts/variance_median": np.median(prev_variances)})
+                                "prompts/variance_median": np.median(prev_variances),
+                                "prompts/latest_clippedans_mean_median": np.median(latest_clippedans_mean),
+                                "prompts/latest_clippedans_mean_mean": np.mean(latest_clippedans_mean),
+                                "prompts/latest_clippedans_mean_std": np.std(latest_clippedans_mean)})
                 logger.log(data=metrics, step=self.global_steps)
 
                 if self.global_steps >= self.total_training_steps:
