@@ -343,7 +343,10 @@ def compute_data_metrics(batch, use_critic=True):
         'prompt_length/clip_ratio':
             torch.mean(torch.eq(prompt_length, max_prompt_length).float()).detach().item(),
     }
-    return metrics
+    
+    # record the clip per prompt
+    clip_persample = torch.eq(response_length, max_response_length).float()
+    return metrics, clip_persample
 
 
 def compute_timing_metrics(batch, timing_raw):
@@ -657,7 +660,7 @@ class RayPPOTrainer(object):
         self.validation_table = new_table
         
         
-    def compute_variance_and_visitcount(self, batch):
+    def compute_per_prompt_stats(self, batch, clip_persample):
         # Keep track of the stats chanege of all the prompts.
         batch_indices = np.array(batch.non_tensor_batch['index'], dtype=object)
         # Get unique indices and their first occurrence indices.
@@ -686,13 +689,18 @@ class RayPPOTrainer(object):
         total_clipppedans_mean = 0
         clippedansmean_est_error = 0
         tmp_latest_clippedans_mean = defaultdict(list) 
-        for i, unique_id in batch_indices:
-            tmp_latest_clippedans_mean[unique_id].append(torch.eq(len(batch.batch[i]["responses"]), self.config.data.max_response_length))
+        for i, unique_id in enumerate(batch_indices):
+            tmp_latest_clippedans_mean[unique_id].append(clip_persample[i])
         for unique_id, clipped_an_mean in tmp_latest_clippedans_mean.items():
-            clippedansmean_est_error += np.absolute(self.latest_clippedans_mean[unique_id]-np.mean(clipped_an_mean))/len(unique_ids)
+            clippedansmean_est_error += np.absolute(
+                self.latest_clippedans_mean[unique_id]
+                - np.mean(clipped_an_mean)
+            ) / len(unique_ids)
             self.latest_clippedans_mean[unique_id] = np.mean(clipped_an_mean)
-            total_clipppedans_mean += np.absolute(self.latest_clippedans_mean[unique_id])/len(unique_ids)
-            
+            total_clipppedans_mean += np.absolute(
+                self.latest_clippedans_mean[unique_id]
+            ) / len(unique_ids)
+
         return{
             "est_var_error/mean": var_est_error,
             "est_var_error/ratio": var_est_error/total_var,
@@ -1109,6 +1117,10 @@ class RayPPOTrainer(object):
                     list_to_sort = variance_list
                 elif self.config.active_strategy.selection_metric == "reward":
                     list_to_sort = reward_list
+                elif self.config.active_strategy.selection_metric == "variance_and_clipraio":
+                    # I want the clip ratio to be dominating term
+                    list_to_sort = [(idx, self.latest_reward_mean[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
+                    list_to_sort.sort(key=lambda x: x[1], reverse=True)
                 elif self.config.active_strategy.strategy_type == "greedy":
                     raise ValueError(f"Unsupported selection metric: {self.config.selection_metric}")
                 
@@ -1275,13 +1287,13 @@ class RayPPOTrainer(object):
 
 
                 # collect metrics
-                metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
+                data_metrics, clip_persample = compute_data_metrics(batch=batch, use_critic=self.use_critic)
+                metrics.update(data_metrics)
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
-                metrics.update(self.compute_variance_and_visitcount(batch))
+                metrics.update(self.compute_per_prompt_stats(batch, clip_persample))
                 
                 # For a subset of tracked prompts, we also track their outputs texts
                 self._maybe_log_train_generations_to_wandb(batch, epoch, end_of_epoch=batch_idx==len(self.train_dataloader)-1)
-                
                     
                 if batch_idx==len(self.train_dataloader)-1:
                     visit_counts = np.array(list(self.visit_counts.values()))
