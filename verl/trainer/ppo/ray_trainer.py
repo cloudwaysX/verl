@@ -1117,12 +1117,12 @@ class RayPPOTrainer(object):
                     list_to_sort = variance_list
                 elif self.config.active_strategy.selection_metric == "reward":
                     list_to_sort = reward_list
-                elif self.config.active_strategy.selection_metric == "variance_and_clipraio":
+                elif self.config.active_strategy.selection_metric == "variance_and_clipratio":
                     # I want the clip ratio to be dominating term
                     list_to_sort = [(idx, self.latest_reward_mean[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
                     list_to_sort.sort(key=lambda x: x[1], reverse=True)
                 elif self.config.active_strategy.strategy_type == "greedy":
-                    raise ValueError(f"Unsupported selection metric: {self.config.selection_metric}")
+                    raise ValueError(f"Unsupported selection metric: {self.config.active_strategy_selection_metric}")
                 
                 # Select the 50% indices starting from the top 50% indices
                 assert self.config.active_strategy.greedy_top_percent >= 0 and self.config.active_strategy.greedy_top_percent<= 0.5,f"greedy_top_percent must be between 0 and 0.5 but get {self.config.active_strategy.greedy_top_percent}"
