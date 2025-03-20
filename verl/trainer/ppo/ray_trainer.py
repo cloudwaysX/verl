@@ -1086,7 +1086,7 @@ class RayPPOTrainer(object):
                     raise ValueError(f"Unsupported selection metric: {self.config.selection_metric}")
                 
                 # Select the 50% indices starting from the top 50% indices
-                assert self.config.active_strategy.greedy_top_percent > 0 and self.config.active_strategy.greedy_top_percent < 0.5, "greedy_top_percent must be between 0 and 0.5"
+                assert self.config.active_strategy.greedy_top_percent >= 0 and self.config.active_strategy.greedy_top_percent=< 0.5, "greedy_top_percent must be between 0 and 0.5"
                 start_po = int(self.config.active_strategy.greedy_top_percent*len(index))
 
                 # Select the top 50% indices
