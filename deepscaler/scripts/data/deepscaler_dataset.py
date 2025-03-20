@@ -29,7 +29,7 @@ def extract_solution(solution_str: str) -> str:
     return remove_boxed(last_boxed_only_string(solution_str))
 
 
-def make_map_fn(split: str):
+def make_map_fn(split: str, source: Any = None):
     """Create a mapping function to process dataset examples.
 
     Args:
@@ -45,7 +45,7 @@ def make_map_fn(split: str):
         answer = example.pop('answer')
 
         data = {
-            "data_source": "",
+            "data_source": source.value if source else "",
             "prompt": [{
                 "role": "user",
                 "content": question
@@ -90,7 +90,7 @@ if __name__ == '__main__':
 
     # Process training data
     train_data: List[Dict[str, Any]] = []
-    process_fn = make_map_fn('train')
+    process_fn = make_map_fn('train', train_datasets[0])
     for idx, example in enumerate(train_dataset):
         processed_example = process_fn(example, idx)
         if processed_example is not None:
@@ -99,7 +99,7 @@ if __name__ == '__main__':
     # Process and save each test dataset separately
     for test_dataset, test_data_list in zip(test_datasets, test_datasets_data):
         test_data: List[Dict[str, Any]] = []
-        process_fn = make_map_fn('test')
+        process_fn = make_map_fn('test', test_dataset)
         for idx, example in enumerate(test_data_list):
             processed_example = process_fn(example, idx)
             if processed_example is not None:
