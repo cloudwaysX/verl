@@ -1097,7 +1097,7 @@ class RayPPOTrainer(object):
                         selected_indices = set(random.sample(index, len(index)//2))
                     else:
                         # Update the batch to keep only selected top 50% indices
-                        print(f"With probability {1-self.config.active_strategy.greedy_exploration_ratio}, select the top 50%.")
+                        print(f"With probability {1-self.config.active_strategy.greedy_exploration_ratio}, select the top {self.config.active_strategy.greedy_top_percent*100}% - {self.config.active_strategy.greedy_top_percent*100 + 50}%.")
                         selected_indices = set(idx for idx, _ in list_to_sort[start_po:start_po+len(list_to_sort)//2])
                     selected_inbatch_idx = [i for i, idx in enumerate(index) if idx in selected_indices]
                     batch.reorder(torch.tensor(selected_inbatch_idx))
