@@ -1079,10 +1079,20 @@ class RayPPOTrainer(object):
         np.random.seed(42)
         self.tracked_samples_idx = np.random.choice(self.train_dataset.get_all_prompt_ids(), num_tracked_samples, replace=False)
 
-        # Recording the previous variance
+        # Initialize the prev_variances, latest_reward_mean and latest_clippedans_mean 
+        # if not loaded from checkpoint
         if not self.prev_variances:
             for idx in self.train_dataset.get_all_prompt_ids():
                 self.prev_variances[idx] = 0.25
+        if not self.latest_reward_mean:
+            for idx in self.train_dataset.get_all_prompt_ids():
+                self.latest_reward_mean[idx] = 0
+        if not self.latest_clippedans_mean:
+            for idx in self.train_dataset.get_all_prompt_ids():
+                self.latest_clippedans_mean[idx] = 0
+        if not self.visit_counts:
+            for idx in self.train_dataset.get_all_prompt_ids():
+                self.visit_counts[idx] = 0
 
         for epoch in range(self.config.trainer.total_epochs):
             self.tracked_texts = {}
@@ -1099,13 +1109,6 @@ class RayPPOTrainer(object):
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
 
                 index = batch.non_tensor_batch['index']
-                
-                # Pending: initialize the visited counts and last reward mean
-                for idx in index:
-                    if idx not in self.visit_counts:
-                        self.visit_counts[idx] = 0
-                    if idx not in self.latest_reward_mean:
-                        self.latest_reward_mean[idx] = 0
     
                 # Sort the indices by the selection metric (either variance or reward) in descending order
                 list_to_sort = None
@@ -1119,7 +1122,15 @@ class RayPPOTrainer(object):
                     list_to_sort = reward_list
                 elif self.config.active_strategy.selection_metric == "variance_and_clipratio":
                     # I want the clip ratio to be dominating term
+                    list_to_sort = [(idx, self.prev_variances[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
+                    list_to_sort.sort(key=lambda x: x[1], reverse=True)
+                elif self.config.active_strategy.selection_metric == "highreward_and_clipratio_1":
+                    # I want the clip ratio to be dominating term
                     list_to_sort = [(idx, self.latest_reward_mean[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
+                    list_to_sort.sort(key=lambda x: x[1], reverse=True)
+                elif self.config.active_strategy.selection_metric == "lowreward_and_clipratio_2":
+                    # I want the clip ratio to be dominating term
+                    list_to_sort = [(idx, -self.latest_reward_mean[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
                     list_to_sort.sort(key=lambda x: x[1], reverse=True)
                 elif self.config.active_strategy.strategy_type == "greedy":
                     raise ValueError(f"Unsupported selection metric: {self.config.active_strategy_selection_metric}")
