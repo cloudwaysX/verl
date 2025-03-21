@@ -1053,6 +1053,8 @@ class RayPPOTrainer(object):
             self.latest_clippedans_mean = torch.load(latest_clippedans_mean_path)
         else:
             print("No latest_clippedans_mean checkpoint found. Starting fresh.")
+            
+        return 1
 
     def _balance_batch(self, batch: DataProto, metrics, logging_prefix='global_seqlen'):
         """Reorder the data on single controller such that each dp rank gets similar total tokens"""
@@ -1088,7 +1090,7 @@ class RayPPOTrainer(object):
         self.global_steps = 0
 
         # load checkpoint before doing anything
-        self._load_checkpoint()
+        resume_from_ckpt = self._load_checkpoint()
 
         # perform validation before training
         # currently, we only support validation using the reward_function.
@@ -1175,9 +1177,6 @@ class RayPPOTrainer(object):
                     if p < self.config.active_strategy.greedy_exploration_ratio:
                         print(f"With probability {self.config.active_strategy.greedy_exploration_ratio}, randomly select the 50%.")
                         selected_indices = set(random.sample(list(index), len(index)//2))
-                    elif epoch==0 or epoch==1:
-                        print(f"At first two epochs, always select the top 50% to make sure each data has been visited at least once.")
-                        selected_indices = set(idx for idx, _ in list_to_sort[:len(list_to_sort)//2])
                     else:
                         # Update the batch to keep only selected top 50% indices
                         print(f"With probability {1-self.config.active_strategy.greedy_exploration_ratio}, select the top {self.config.active_strategy.greedy_top_percent*100}% - {self.config.active_strategy.greedy_top_percent*100 + 50}%.")
