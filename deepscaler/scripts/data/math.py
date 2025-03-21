@@ -50,7 +50,7 @@ def make_map_fn(split: str, source: Any = None):
                 "role": "user",
                 "content": question
             }],
-            "ability": "math",
+            "ability": f"math-{example['type']}",
             "reward_model": {
                 "style": "rule",
                 "ground_truth": answer
@@ -84,11 +84,8 @@ if __name__ == '__main__':
     makedirs(local_dir, exist_ok=True)
 
     # Initialize datasets
-    train_datasets = [TrainDataset.DEEPSCALER]
+    train_datasets = [TrainDataset.MATH]
     train_dataset = load_dataset(train_datasets[0])
-    test_datasets = [TestDataset.AIME, TestDataset.AMC, TestDataset.MATH, TestDataset.MINERVA, TestDataset.OLYMPIAD_BENCH]
-    
-    test_datasets_data = [load_dataset(d) for d in test_datasets]
 
     # Process training data
     train_data: List[Dict[str, Any]] = []
@@ -98,26 +95,11 @@ if __name__ == '__main__':
         if processed_example is not None:
             train_data.append(processed_example)
 
-    # Process and save each test dataset separately
-    for test_dataset, test_data_list in zip(test_datasets, test_datasets_data):
-        test_data: List[Dict[str, Any]] = []
-        process_fn = make_map_fn('test', test_dataset)
-        for idx, example in enumerate(test_data_list):
-            processed_example = process_fn(example, idx)
-            if processed_example is not None:
-                test_data.append(processed_example)
-
-        dataset_name = test_dataset.value.lower()
-        test_df = pd.DataFrame(test_data)
-        makedirs(os.path.join(local_dir, dataset_name), exist_ok=True)
-        test_df.to_parquet(os.path.join(local_dir, f'{dataset_name}/test.parquet'))
-        print(f"{dataset_name} test data size:", len(test_data))
-
     # Save training dataset
     print("train data size:", len(train_data))
     train_df = pd.DataFrame(train_data)
-    makedirs(os.path.join(local_dir, "deepscaler"), exist_ok=True)
-    train_df.to_parquet(os.path.join(local_dir, 'deepscaler/train.parquet'))
+    makedirs(os.path.join(local_dir, "math"), exist_ok=True)
+    train_df.to_parquet(os.path.join(local_dir, 'math/train.parquet'))
 
     # Optionally copy to HDFS
     if hdfs_dir is not None:
