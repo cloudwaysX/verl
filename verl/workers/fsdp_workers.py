@@ -251,13 +251,13 @@ class ActorRolloutRefWorker(Worker):
         sharding_strategy = get_sharding_strategy(fsdp_mesh)
         load_origin_param = False
 
-        if self.config.actor.get('freeze_attn', False):
+        if self.config.actor.get('freeze_attn', 0.0):
             for name, p in actor_module.named_parameters():
                 if 'attn' in name:
                     p.requires_grad = False
                     load_origin_param = True
         
-        if self.config.actor.get('freeze_mlp', False):
+        if self.config.actor.get('freeze_mlp', 0.0):
             for name, p in actor_module.named_parameters():
                 if 'mlp' in name:
                     p.requires_grad = False

@@ -418,6 +418,8 @@ class RayPPOTrainer(object):
                  val_reward_fn=None):
 
         # assert torch.cuda.is_available(), 'cuda must be available on driver'
+        
+
 
         self.tokenizer = tokenizer
         self.processor = processor
@@ -463,6 +465,10 @@ class RayPPOTrainer(object):
 
         self._validate_config()
         self._create_dataloader()
+        
+        # change save_freq if save_freq_epoch is set
+        if config.trainer.save_freq_epoch > 0:
+            config.trainer.save_freq = config.trainer.save_freq_epoch * len(self.train_dataloader)
 
         # Track latest stats for each unique prompt
         self.return_rewards_std = True
@@ -567,7 +573,8 @@ class RayPPOTrainer(object):
                                          filter_prompts=True,
                                          return_raw_chat=self.config.data.get('return_raw_chat', False),
                                          truncation='error',
-                                         train_ratio = self.config.data.train_ratio)
+                                         train_ratio = self.config.data.train_ratio,
+                                         train_ratio_seed=self.config.data.get('train_ratio_seed', None))
         # use sampler for better ckpt resume
         if self.config.data.shuffle:
             train_dataloader_generator = torch.Generator()
@@ -1312,10 +1319,6 @@ class RayPPOTrainer(object):
                         metrics.update(val_metrics)
 
                     if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
-                        with _timer('save_checkpoint', timing_raw):
-                            self._save_checkpoint()
-                    elif batch_idx==len(self.train_dataloader)-1 and epoch==0:
-                        print("Save the first epoch.")
                         with _timer('save_checkpoint', timing_raw):
                             self._save_checkpoint()
 

@@ -89,7 +89,8 @@ class RLHFDataset(Dataset):
                  chat_template_func=None,
                  return_raw_chat=False,
                  truncation='error',
-                 train_ratio=1):
+                 train_ratio=1,
+                 train_ratio_seed=None):
         if not isinstance(parquet_files, (List, ListConfig)):
             parquet_files = [parquet_files]
 
@@ -112,7 +113,7 @@ class RLHFDataset(Dataset):
         # default not store
         self.serialize_dataset = False
         self._download()
-        self._read_files_and_tokenize(train_ratio)
+        self._read_files_and_tokenize(train_ratio, train_ratio_seed)
         self._set_all_prompt_ids()
 
     def _download(self, use_origin_parquet=False):
@@ -121,7 +122,7 @@ class RLHFDataset(Dataset):
         for i, parquet_file in enumerate(parquet_files):
             self.parquet_files[i] = copy_to_local(src=parquet_file, cache_dir=self.cache_dir)
 
-    def _read_files_and_tokenize(self, train_ratio):
+    def _read_files_and_tokenize(self, train_ratio, train_ratio_seed=None):
         dataframes = []
         for parquet_file in self.parquet_files:
             # read parquet files and cache
@@ -140,6 +141,9 @@ class RLHFDataset(Dataset):
         if train_ratio<1:
             size = int(len(self.dataframe)*train_ratio)
             print(f"[TEST only] select the first {size} for testing")
+            if train_ratio_seed is not None:
+                np.random.seed(train_ratio_seed)
+                self.dataframe = self.dataframe.sample(frac=1, random_state=train_ratio_seed).reset_index(drop=)
             self.dataframe = self.dataframe.head(size)
 
     def resume_dataset_state(self,train_ratio=1):
