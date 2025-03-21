@@ -180,6 +180,9 @@ class RLHFDataset(Dataset):
         self.rawindex2rowindex = {v: k for k, v in enumerate(out)}  
         return out
     
+    def get_all_topics(self):
+        return set(self.dataframe["ability"])
+    
     def get_all_prompt_ids(self):
         return list(self.rawindex2rowindex.keys())
 

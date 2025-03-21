@@ -256,7 +256,26 @@ def _compute_response_info(batch):
         prompt_length=prompt_length,
         response_length=response_length,
     )
+    
 
+def compute_difficulty_metrics(batch):
+    extra_info = batch.non_tensor_batch['extra_info']
+    metrics = {}
+    if 'difficulty' in extra_info:
+        difficulty = extra_info['difficulty']
+        metrics.update({
+            'difficulty/mean': torch.mean(difficulty).detach().item(),
+            'difficulty/max': torch.max(difficulty).detach().item(),
+            'difficulty/min': torch.min(difficulty).detach().item(),
+        })
+    return metrics
+
+def compute_subtopic_metrics(batch, all_topics):
+    batch_abilities = batch.non_tensor_batch['ability']
+    metrics = {f'topic_count/{topic}': 0 for topic in all_topics}
+    for ability in batch_abilities:
+        metrics[f'topic_count/{ability}'] += 1
+    return metrics
 
 def compute_data_metrics(batch, use_critic=True):
     # TODO: add response length
@@ -1073,6 +1092,8 @@ class RayPPOTrainer(object):
                 return
 
 
+        # Get all subtopics
+        all_topics = self.train_dataset.get_all_topics()
 
         # Add a random sampled subset of the training dataset and track their variance
         num_tracked_samples = 200
@@ -1301,6 +1322,8 @@ class RayPPOTrainer(object):
                 # collect metrics
                 data_metrics, clip_persample = compute_data_metrics(batch=batch, use_critic=self.use_critic)
                 metrics.update(data_metrics)
+                metrics.update(compute_difficulty_metrics(batch=batch))
+                metrics.update(compute_subtopic_metrics(batch=batch, all_topics=all_topics))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
                 metrics.update(self.compute_per_prompt_stats(batch, clip_persample))
                 
