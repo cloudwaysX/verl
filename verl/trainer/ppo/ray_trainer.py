@@ -263,11 +263,11 @@ def compute_difficulty_metrics(batch):
     if 'difficulty' in batch.non_tensor_batch:
         metrics.update({
             'difficulty/mean':
-                torch.mean(batch.non_tensor_batch['difficulty']).detach().item(),
+                np.mean(batch.non_tensor_batch['difficulty']),
             'difficulty/max':
-                torch.max(batch.non_tensor_batch['difficulty']).detach().item(),
+                np.max(batch.non_tensor_batch['difficulty']),
             'difficulty/min':
-                torch.min(batch.non_tensor_batch['difficulty']).detach().item(),
+                np.min(batch.non_tensor_batch['difficulty']),
         })
     return metrics
 
