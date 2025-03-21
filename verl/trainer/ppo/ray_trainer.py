@@ -1081,15 +1081,16 @@ class RayPPOTrainer(object):
 
         # Initialize the prev_variances, latest_reward_mean and latest_clippedans_mean 
         # if not loaded from checkpoint
+        # set the variance, rewardmean and clippedansmean to largest so make sure each has been visited at least once
         if not self.prev_variances:
             for idx in self.train_dataset.get_all_prompt_ids():
                 self.prev_variances[idx] = 0.25
         if not self.latest_reward_mean:
             for idx in self.train_dataset.get_all_prompt_ids():
-                self.latest_reward_mean[idx] = 0
+                self.latest_reward_mean[idx] = 1
         if not self.latest_clippedans_mean:
             for idx in self.train_dataset.get_all_prompt_ids():
-                self.latest_clippedans_mean[idx] = 0
+                self.latest_clippedans_mean[idx] = 1
         if not self.visit_counts:
             for idx in self.train_dataset.get_all_prompt_ids():
                 self.visit_counts[idx] = 0
@@ -1145,8 +1146,8 @@ class RayPPOTrainer(object):
                     if p < self.config.active_strategy.greedy_exploration_ratio:
                         print(f"With probability {self.config.active_strategy.greedy_exploration_ratio}, randomly select the 50%.")
                         selected_indices = set(random.sample(index, len(index)//2))
-                    elif epoch == 0 or epoch == 1:
-                        print("At the first two epochs, randomly select the 50%.")
+                    elif epoch==0 or epoch==1:
+                        print(f"At first two epochs, always select the top 50% to make sure each data has been visited at least once.")
                         selected_indices = set(random.sample(index, len(index)//2))
                     else:
                         # Update the batch to keep only selected top 50% indices
