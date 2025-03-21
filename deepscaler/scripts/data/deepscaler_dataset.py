@@ -6,6 +6,7 @@ instruction prompts, and saves the processed data as parquet files.
 """
 
 import argparse
+import difflib
 import os
 from typing import Dict, List, Optional, Any
 
@@ -43,6 +44,7 @@ def make_map_fn(split: str, source: Any = None):
         instruction = "Let's think step by step and output the final answer within \\boxed{}."
         question = f"{question} {instruction}"
         answer = example.pop('answer')
+        diffliculty = example.pop('difficulty')
 
         data = {
             "data_source": source.value if source else "",
@@ -58,7 +60,7 @@ def make_map_fn(split: str, source: Any = None):
             "extra_info": {
                 'split': split,
                 'index': idx,
-                'difficulty': example['difficulty'],
+                'difficulty': diffliculty,
             }
         }
         return data

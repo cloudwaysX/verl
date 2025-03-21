@@ -43,6 +43,8 @@ def make_map_fn(split: str, source: Any = None):
         instruction = "Let's think step by step and output the final answer within \\boxed{}."
         question = f"{question} {instruction}"
         answer = example.pop('answer')
+        type = example.pop('type')
+        difficulty = example.pop('difficulty')
 
         data = {
             "data_source": source.value if source else "",
@@ -50,7 +52,7 @@ def make_map_fn(split: str, source: Any = None):
                 "role": "user",
                 "content": question
             }],
-            "ability": f"math-{example['type']}",
+            "ability": f"math-{type}",
             "reward_model": {
                 "style": "rule",
                 "ground_truth": answer
@@ -58,7 +60,7 @@ def make_map_fn(split: str, source: Any = None):
             "extra_info": {
                 'split': split,
                 'index': idx,
-                'difficulty': example['difficulty'],
+                'difficulty': difficulty,
             }
         }
         return data
