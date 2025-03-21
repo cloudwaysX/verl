@@ -1145,10 +1145,10 @@ class RayPPOTrainer(object):
                     p = random.random()
                     if p < self.config.active_strategy.greedy_exploration_ratio:
                         print(f"With probability {self.config.active_strategy.greedy_exploration_ratio}, randomly select the 50%.")
-                        selected_indices = set(random.sample(index, len(index)//2))
+                        selected_indices = set(random.sample(list(index), len(index)//2))
                     elif epoch==0 or epoch==1:
                         print(f"At first two epochs, always select the top 50% to make sure each data has been visited at least once.")
-                        selected_indices = set(random.sample(index, len(index)//2))
+                        selected_indices = set(idx for idx, _ in list_to_sort[:len(list_to_sort)//2])
                     else:
                         # Update the batch to keep only selected top 50% indices
                         print(f"With probability {1-self.config.active_strategy.greedy_exploration_ratio}, select the top {self.config.active_strategy.greedy_top_percent*100}% - {self.config.active_strategy.greedy_top_percent*100 + 50}%.")
