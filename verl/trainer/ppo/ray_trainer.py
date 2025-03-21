@@ -259,14 +259,15 @@ def _compute_response_info(batch):
     
 
 def compute_difficulty_metrics(batch):
-    extra_info = batch.non_tensor_batch['extra_info']
     metrics = {}
-    if 'difficulty' in extra_info:
-        difficulty = extra_info['difficulty']
+    if 'difficulty' in batch.non_tensor_batch:
         metrics.update({
-            'difficulty/mean': torch.mean(difficulty).detach().item(),
-            'difficulty/max': torch.max(difficulty).detach().item(),
-            'difficulty/min': torch.min(difficulty).detach().item(),
+            'difficulty/mean':
+                torch.mean(batch.non_tensor_batch['difficulty']).detach().item(),
+            'difficulty/max':
+                torch.max(batch.non_tensor_batch['difficulty']).detach().item(),
+            'difficulty/min':
+                torch.min(batch.non_tensor_batch['difficulty']).detach().item(),
         })
     return metrics
 

@@ -254,6 +254,9 @@ class RLHFDataset(Dataset):
             row_dict["index"] = row_dict["extra_info"]["index"]
         else:
             row_dict["index"] = self.dataframe.index[item]
+            
+        if "extra_info" in row_dict and "difficulty" in row_dict["extra_info"]:
+            row_dict["difficulty"] = row_dict["extra_info"]["difficulty"]
 
         return row_dict
 
