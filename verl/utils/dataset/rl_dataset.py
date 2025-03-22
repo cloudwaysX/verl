@@ -143,7 +143,7 @@ class RLHFDataset(Dataset):
             print(f"[TEST only] select the first {size} for testing")
             if train_ratio_seed is not None:
                 np.random.seed(train_ratio_seed)
-                self.dataframe = self.dataframe.sample(frac=1, random_state=train_ratio_seed).reset_index(drop=)
+                self.dataframe = self.dataframe.sample(frac=1, random_state=train_ratio_seed).reset_index(drop=True)
             self.dataframe = self.dataframe.head(size)
 
     def resume_dataset_state(self,train_ratio=1):
