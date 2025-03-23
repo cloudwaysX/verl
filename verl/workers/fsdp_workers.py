@@ -261,11 +261,10 @@ class ActorRolloutRefWorker(Worker):
         if self.config.actor.get('freeze_mlp', 0.0):
             for name, p in actor_module.named_parameters():
                 if 'mlp' in name:
-                    print("DEBUG: freeze_mlp name: {name}")
-                    h_idx= re.search(r"h\.(\d+)\.mlp")
-                    print(f"freeze_mlp h_idx: {h_idx}")
-                    h_idx = int(h_idx.group(1))
-                    if (h_idx%5) < (5*self.config.actor.freeze_mlp):
+                    h_idx= name.split(".")
+                    h_idx = int(h_idx[2])
+                    if (h_idx%5) < int(5*self.config.actor.freeze_mlp):
+                        print(f"freeze_mlp h_idx: {h_idx}")
                         p.requires_grad = False
                         load_origin_param = True
 
