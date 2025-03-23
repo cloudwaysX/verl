@@ -574,7 +574,8 @@ class RayPPOTrainer(object):
                                          return_raw_chat=self.config.data.get('return_raw_chat', False),
                                          truncation='error',
                                          train_ratio = self.config.data.train_ratio,
-                                         train_ratio_seed=self.config.data.get('train_ratio_seed', None))
+                                         train_ratio_seed=self.config.data.get('train_ratio_seed', None),
+                                         preselect=self.config.data.get('preselect', None))
         # use sampler for better ckpt resume
         if self.config.data.shuffle:
             train_dataloader_generator = torch.Generator()

@@ -27,6 +27,17 @@ from transformers import PreTrainedTokenizer, ProcessorMixin
 from verl.utils.model import compute_position_id_with_mask
 import verl.utils.torch_functional as verl_F
 
+def selection_for_math_difficulty(dataframe, lower_bound=3, upper_bound=5):
+    
+    assert "difficulty" in dataframe["extra_info"][0], "difficulty is not in the extra_info"
+    
+    # Select the rows with difficulty between the lower and upper bounds
+    selected_rows = dataframe[dataframe["extra_info"]["difficulty"] >= lower_bound]
+    selected_rows = selected_rows[dataframe["extra_info"]["difficulty"] <= upper_bound]
+    
+    return dataframe[selected_rows]
+
+
 
 def collate_fn(data_list: list[dict]) -> dict:
     tensors = defaultdict(list)
@@ -90,7 +101,8 @@ class RLHFDataset(Dataset):
                  return_raw_chat=False,
                  truncation='error',
                  train_ratio=1,
-                 train_ratio_seed=None):
+                 train_ratio_seed=None,
+                 preselect=None):
         if not isinstance(parquet_files, (List, ListConfig)):
             parquet_files = [parquet_files]
 
@@ -114,6 +126,8 @@ class RLHFDataset(Dataset):
         self.serialize_dataset = False
         self._download()
         self._read_files_and_tokenize(train_ratio, train_ratio_seed)
+        if preselect is not None and preselect in ['math_difficulty']:
+            self.dataframe = selection_for_math_difficulty(self.dataframe, preselect_difficulty)
         self._set_all_prompt_ids()
 
     def _download(self, use_origin_parquet=False):
