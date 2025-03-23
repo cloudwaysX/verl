@@ -32,9 +32,7 @@ def selection_for_math_difficulty(dataframe, lower_bound=3, upper_bound=5):
     assert "difficulty" in dataframe["extra_info"][0], "difficulty is not in the extra_info"
     
     # Select the rows with difficulty between the lower and upper bounds
-    selected_rows = dataframe[dataframe["extra_info"]["difficulty"] >= lower_bound]
-    selected_rows = selected_rows[dataframe["extra_info"]["difficulty"] <= upper_bound]
-    
+    selected_rows = dataframe["extra_info"].apply(lambda x: lower_bound<=x["difficulty"] <=upper_bound)
     return dataframe[selected_rows]
 
 
@@ -125,9 +123,7 @@ class RLHFDataset(Dataset):
         # default not store
         self.serialize_dataset = False
         self._download()
-        self._read_files_and_tokenize(train_ratio, train_ratio_seed)
-        if preselect is not None and preselect in ['math_difficulty']:
-            self.dataframe = selection_for_math_difficulty(self.dataframe, preselect_difficulty)
+        self._read_files_and_tokenize(train_ratio, train_ratio_seed, preselect)
         self._set_all_prompt_ids()
 
     def _download(self, use_origin_parquet=False):
@@ -136,7 +132,7 @@ class RLHFDataset(Dataset):
         for i, parquet_file in enumerate(parquet_files):
             self.parquet_files[i] = copy_to_local(src=parquet_file, cache_dir=self.cache_dir)
 
-    def _read_files_and_tokenize(self, train_ratio, train_ratio_seed=None):
+    def _read_files_and_tokenize(self, train_ratio, train_ratio_seed=None, preselect=None):
         dataframes = []
         for parquet_file in self.parquet_files:
             # read parquet files and cache
@@ -159,6 +155,8 @@ class RLHFDataset(Dataset):
                 np.random.seed(train_ratio_seed)
                 self.dataframe = self.dataframe.sample(frac=1, random_state=train_ratio_seed).reset_index(drop=True)
             self.dataframe = self.dataframe.head(size)
+        if preselect is not None and preselect in ['math_difficulty']:
+            self.dataframe = selection_for_math_difficulty(self.dataframe)
 
     def resume_dataset_state(self,train_ratio=1):
         self.serialize_dataset = False if hasattr(self, 'original_parquet_files') else True
