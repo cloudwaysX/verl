@@ -1135,6 +1135,8 @@ class RayPPOTrainer(object):
 
         # load checkpoint before doing anything
         resume_from_ckpt = self._load_checkpoint()
+        if resume_from_ckpt and self.config.active_strategy.greedy_top_percent > 0:
+            raise ValueError("Greedy topp >0 is not supported when resuming from checkpoint.")
 
         # perform validation before training
         # currently, we only support validation using the reward_function.

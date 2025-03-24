@@ -19,19 +19,16 @@ class GreedyBatchSampler(Sampler):
         self.selection_fn = selection_fn
         self.greedy_top_percent = greedy_top_percent
         self.greedy_exploration_ratio = greedy_exploration_ratio
-        self.is_initial_epoch = True
+        self._iter_count = 0
         
-    def set_inital_epoch(self, initial_epoch):
-        self.is_initial_epoch = initial_epoch
 
     def __iter__(self):
         for batch in self.base_batch_sampler:
             half = len(batch) // 2  # we want to keep half of the indices
-            if self.is_initial_epoch:
+            if self._iter_count<=1:
                 print("Initial epochs, select 50%")
                 sorted_batch = sorted(batch, key=lambda idx: self.selection_fn(idx), reverse=True)
                 # Skip a fraction at the beginning defined by greedy_top_percent.
-                start = int(self.greedy_top_percent * len(batch))
                 selected = sorted_batch[:half]
             elif random.random() < self.greedy_exploration_ratio:
                 # Randomly sample half the batch indices.
@@ -44,5 +41,13 @@ class GreedyBatchSampler(Sampler):
                 start = int(self.greedy_top_percent * len(batch))
                 selected = sorted_batch[start:start+half]
             yield selected
+        self._iter_count += 1
+        
     def __len__(self):
         return len(self.base_batch_sampler)
+    
+    def save_state(self):
+        return {'iter_count': self._iter_count}
+    
+    def load_state(self, state):
+        self._iter_count = state['iter_count']
