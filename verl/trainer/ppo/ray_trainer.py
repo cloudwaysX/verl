@@ -42,8 +42,9 @@ from verl.trainer.ppo import core_algos
 from verl.utils.seqlen_balancing import get_seqlen_balanced_partitions, log_seqlen_unbalance
 from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path
 from verl.utils.dataset.rl_dataset import RLHFDataset, collate_fn
-from torch.utils.data import RandomSampler, SequentialSampler
+from torch.utils.data import RandomSampler, SequentialSampler, BatchSampler
 from torchdata.stateful_dataloader import StatefulDataLoader
+from verl.trainer.ppo.samplers import GreedyBatchSampler
 
 WorkerType = Type[Worker]
 
@@ -580,22 +581,55 @@ class RayPPOTrainer(object):
         if self.config.data.shuffle:
             train_dataloader_generator = torch.Generator()
             train_dataloader_generator.manual_seed(self.config.data.get('seed', 1))
-            sampler = RandomSampler(data_source=self.train_dataset, generator=train_dataloader_generator)
+            base_sampler = RandomSampler(data_source=self.train_dataset, generator=train_dataloader_generator)
         else:
-            sampler = SequentialSampler(data_source=self.train_dataset)
+            base_sampler = SequentialSampler(data_source=self.train_dataset)
 
-
-        if self.config.active_strategy.strategy_type=="greedy":
-            batch_size = self.config.data.train_batch_size * 2
-            # print(f"Ignoring the variance threshold when setting active strategy to greedy")
+        if self.config.active_strategy.strategy_type == "greedy":
+            base_batch_sampler = BatchSampler(base_sampler, batch_size=self.config.data.train_batch_size * 2, drop_last=True)
+            # Define a helper to compute the selection metric.
+            def selection_fn(idx):
+                metric_type = self.config.active_strategy.selection_metric
+                if metric_type == "variance":
+                    return self.prev_variances.get(idx, 0)
+                elif metric_type == "reward":
+                    return self.latest_reward_mean.get(idx, 0)
+                elif metric_type == "variance_and_clipratio":
+                    return (
+                        self.prev_variances.get(idx, 0)
+                        + self.latest_clippedans_mean.get(idx, 0) * 10  
+                    )
+                elif metric_type == "highreward_and_clipratio_1":
+                    return (
+                        self.latest_reward_mean.get(idx, 0)
+                        + self.latest_clippedans_mean.get(idx, 0) * 10
+                    )
+                elif metric_type == "lowreward_and_clipratio_2":
+                    return (
+                        -self.latest_reward_mean.get(idx, 0)
+                        + self.latest_clippedans_mean.get(idx, 0) * 10
+                    )
+                else:
+                    raise ValueError(
+                        f"Unsupported selection metric: {metric_type}"
+                    )
+            # Wrap the base batch sampler with the GreedyBatchSampler.
+            self.sampler = GreedyBatchSampler(
+                base_batch_sampler=base_batch_sampler,
+                selection_fn=selection_fn,
+                greedy_top_percent=self.config.active_strategy.greedy_top_percent,
+                greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio
+            )
         else:
-            batch_size = self.config.data.train_batch_size
+            self.sampler = base_sampler
+
+        batch_size = self.config.data.train_batch_size
         self.train_dataloader = StatefulDataLoader(dataset=self.train_dataset,
-                                                   batch_size=batch_size,
-                                                   num_workers=8,
-                                                   drop_last=True,
-                                                   collate_fn=collate_fn,
-                                                   sampler=sampler)
+                                                batch_size=batch_size,
+                                                num_workers=8,
+                                                drop_last=True,
+                                                collate_fn=collate_fn,
+                                                sampler=self.sampler)
 
         self.val_dataset = RLHFDataset(parquet_files=self.config.data.val_files,
                                        tokenizer=self.tokenizer,
@@ -1131,6 +1165,12 @@ class RayPPOTrainer(object):
             self.tracked_texts = {}
             for idx in self.tracked_samples_idx:
                self.tracked_texts[idx] = {}
+               
+            if self.config.active_strategy == "greedy":
+                if not resume_from_ckpt and (epoch == 0 or epoch==1):
+                    self.sampler.set_inital_epoch(True)
+                else:
+                    self.sampler.set_inital_epoch(False)
             
             for batch_idx, batch_dict in enumerate(self.train_dataloader):
                 # we start from step 1
@@ -1140,59 +1180,6 @@ class RayPPOTrainer(object):
                 timing_raw = {}
 
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
-
-                index = batch.non_tensor_batch['index']
-    
-                # Sort the indices by the selection metric (either variance or reward) in descending order
-                list_to_sort = None
-                variance_list = [(idx, self.prev_variances[idx]) for idx in index]
-                variance_list.sort(key=lambda x: x[1], reverse=True)
-                reward_list = [(idx, self.latest_reward_mean[idx]) for idx in index]
-                reward_list.sort(key=lambda x: x[1], reverse=True)
-                if self.config.active_strategy.selection_metric == "variance":
-                    list_to_sort = variance_list
-                elif self.config.active_strategy.selection_metric == "reward":
-                    list_to_sort = reward_list
-                elif self.config.active_strategy.selection_metric == "variance_and_clipratio":
-                    # I want the clip ratio to be dominating term
-                    list_to_sort = [(idx, self.prev_variances[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
-                    list_to_sort.sort(key=lambda x: x[1], reverse=True)
-                elif self.config.active_strategy.selection_metric == "highreward_and_clipratio_1":
-                    # I want the clip ratio to be dominating term
-                    list_to_sort = [(idx, self.latest_reward_mean[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
-                    list_to_sort.sort(key=lambda x: x[1], reverse=True)
-                elif self.config.active_strategy.selection_metric == "lowreward_and_clipratio_2":
-                    # I want the clip ratio to be dominating term
-                    list_to_sort = [(idx, -self.latest_reward_mean[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
-                    list_to_sort.sort(key=lambda x: x[1], reverse=True)
-                elif self.config.active_strategy.strategy_type == "greedy":
-                    raise ValueError(f"Unsupported selection metric: {self.config.active_strategy_selection_metric}")
-                
-                # Select the 50% indices starting from the top 50% indices
-                assert self.config.active_strategy.greedy_top_percent >= 0 and self.config.active_strategy.greedy_top_percent<= 0.5,f"greedy_top_percent must be between 0 and 0.5 but get {self.config.active_strategy.greedy_top_percent}"
-                start_po = int(self.config.active_strategy.greedy_top_percent*len(index))
-
-                # Select the top 50% indices
-                if self.config.active_strategy.strategy_type == "greedy":
-                    p = random.random()
-                    if p < self.config.active_strategy.greedy_exploration_ratio:
-                        print(f"With probability {self.config.active_strategy.greedy_exploration_ratio}, randomly select the 50%.")
-                        selected_indices = set(random.sample(list(index), len(index)//2))
-                    else:
-                        # Update the batch to keep only selected top 50% indices
-                        print(f"With probability {1-self.config.active_strategy.greedy_exploration_ratio}, select the top {self.config.active_strategy.greedy_top_percent*100}% - {self.config.active_strategy.greedy_top_percent*100 + 50}%.")
-                        selected_indices = set(idx for idx, _ in list_to_sort[start_po:start_po+len(list_to_sort)//2])
-                    selected_inbatch_idx = [i for i, idx in enumerate(index) if idx in selected_indices]
-                    batch.reorder(torch.tensor(selected_inbatch_idx))
-                    est_batch_selection_metric = np.mean([var for _, var in list_to_sort[:len(list_to_sort)//2]])
-                    if self.config.active_strategy.selection_metric == "variance":
-                        est_batch_var = est_batch_selection_metric
-                        print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
-                    elif self.config.active_strategy.selection_metric == "reward":
-                        est_batch_reward = est_batch_selection_metric
-                        print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated reward is {est_batch_reward}")
-
-
 
                 # pop those keys for generation
                 if 'multi_modal_inputs' in batch.non_tensor_batch.keys():
