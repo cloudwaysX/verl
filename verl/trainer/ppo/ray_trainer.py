@@ -588,6 +588,8 @@ class RayPPOTrainer(object):
         if self.config.active_strategy.strategy_type == "greedy":
             base_batch_sampler = BatchSampler(base_sampler, batch_size=self.config.data.train_batch_size * 2, drop_last=True)
             # Define a helper to compute the selection metric.
+            print(f"len of base_sampler is", len(base_sampler))
+            print(f"len of base_batch_sampler is", len(base_batch_sampler))
             def selection_fn(idx):
                 metric_type = self.config.active_strategy.selection_metric
                 if metric_type == "variance":
@@ -620,11 +622,18 @@ class RayPPOTrainer(object):
                 greedy_top_percent=self.config.active_strategy.greedy_top_percent,
                 greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio
             )
+            print("len of greedy_sampler", len(self.sampler))
         else:
             self.sampler = base_sampler
 
         batch_size = self.config.data.train_batch_size
-        self.train_dataloader = StatefulDataLoader(dataset=self.train_dataset,
+        if self.config.active_strategy.strategy_type == "greedy":
+            self.train_dataloader = StatefulDataLoader(dataset=self.train_dataset,
+                                                num_workers=8,
+                                                collate_fn=collate_fn,
+                                                batch_sampler=self.sampler)
+        else:
+            self.train_dataloader = StatefulDataLoader(dataset=self.train_dataset,
                                                 batch_size=batch_size,
                                                 num_workers=8,
                                                 drop_last=True,
