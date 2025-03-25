@@ -30,9 +30,11 @@ import verl.utils.torch_functional as verl_F
 def selection_for_math_difficulty(dataframe, lower_bound=3, upper_bound=5):
     
     assert "difficulty" in dataframe["extra_info"][0], "difficulty is not in the extra_info"
-    
+    assert "ability" in dataframe, "ability is not in the data frame"
     # Select the rows with difficulty between the lower and upper bounds
-    selected_rows = dataframe["extra_info"].apply(lambda x: lower_bound<=x["difficulty"] <=upper_bound)
+    selected_rows = dataframe.apply(
+        lambda x: (not x["ability"].startswith("math")) or (lower_bound<=x["extra_info"]["difficulty"] <=upper_bound),
+        axis=1)
     return dataframe[selected_rows]
 
 
@@ -119,6 +121,8 @@ class RLHFDataset(Dataset):
         self.chat_template_func = chat_template_func
         self.truncation = truncation
 
+        self.use_original_id = False
+
         # whether to store the dataset in state_dict()
         # default not store
         self.serialize_dataset = False
@@ -140,8 +144,6 @@ class RLHFDataset(Dataset):
             dataframes.append(dataframe)
         self.dataframe = pd.concat(dataframes)
 
-        print(f'original dataset len: {len(self.dataframe)}')
-
         # filter out too long prompts
         tokenizer = self.tokenizer
         prompt_key = self.prompt_key
@@ -150,13 +152,13 @@ class RLHFDataset(Dataset):
                                                              axis=1)]
         if train_ratio<1:
             size = int(len(self.dataframe)*train_ratio)
-            print(f"[TEST only] select the first {size} for testing")
             if train_ratio_seed is not None:
                 np.random.seed(train_ratio_seed)
                 self.dataframe = self.dataframe.sample(frac=1, random_state=train_ratio_seed).reset_index(drop=True)
             self.dataframe = self.dataframe.head(size)
         if preselect is not None and preselect in ['math_difficulty']:
             self.dataframe = selection_for_math_difficulty(self.dataframe)
+        print(f"The len of final dataset is {len(self.dataframe)}"
 
     def resume_dataset_state(self,train_ratio=1):
         self.serialize_dataset = False if hasattr(self, 'original_parquet_files') else True
@@ -186,6 +188,7 @@ class RLHFDataset(Dataset):
             # If all rows have a valid index from extra_info, use them.
             if indices.notnull().all() and indices.is_unique:
                 out = indices.tolist()
+                self.use_original_id=True
             else:
                 # Fallback: use the DataFrame's inherent index.
                 out = self.dataframe.index.tolist()
@@ -266,7 +269,7 @@ class RLHFDataset(Dataset):
 
         # Check if there is an index inside the extra_info field.
         # If it exists, use it; otherwise, assign the DataFrame's index.
-        if "extra_info" in row_dict and "index" in row_dict["extra_info"]:
+        if self.use_original_id:
             row_dict["index"] = row_dict["extra_info"]["index"]
         else:
             row_dict["index"] = self.dataframe.index[item]

@@ -34,7 +34,7 @@ class GreedyBatchSampler(Sampler):
                 # Randomly sample half the batch indices.
                 selected = random.sample(batch, half)
             else:
-                print(f"With prob {1-p}, select top {self.greedy_top_percent*100}% to {self.greedy_top_percent*100+50}%")   
+                print(f"With prob {1-self.greedy_exploration_ratio}, select top {self.greedy_top_percent*100}% to {self.greedy_top_percent*100+50}%")   
                 # Sort the batch indices by the selection metric in descending order.
                 sorted_batch = sorted(batch, key=lambda idx: self.selection_fn(idx), reverse=True)
                 # Skip a fraction at the beginning defined by greedy_top_percent.
