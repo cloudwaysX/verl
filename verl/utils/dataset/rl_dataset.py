@@ -158,7 +158,7 @@ class RLHFDataset(Dataset):
             self.dataframe = self.dataframe.head(size)
         if preselect is not None and preselect in ['math_difficulty']:
             self.dataframe = selection_for_math_difficulty(self.dataframe)
-        print(f"The len of final dataset is {len(self.dataframe)}"
+        print(f"The len of final dataset is {len(self.dataframe)}")
 
     def resume_dataset_state(self,train_ratio=1):
         self.serialize_dataset = False if hasattr(self, 'original_parquet_files') else True
