@@ -590,26 +590,28 @@ class RayPPOTrainer(object):
             # Define a helper to compute the selection metric.
             print(f"len of base_sampler is", len(base_sampler))
             print(f"len of base_batch_sampler is", len(base_batch_sampler))
+            self.rowindex2rawindex = self.train_dataset.get_all_prompt_ids_inorder()
             def selection_fn(idx):
+                idx =  self.rowindex2rawindex[idx] #TODO
                 metric_type = self.config.active_strategy.selection_metric
                 if metric_type == "variance":
-                    return self.prev_variances.get(idx, 0)
+                    return self.prev_variances[idx]
                 elif metric_type == "reward":
-                    return self.latest_reward_mean.get(idx, 0)
+                    return self.latest_reward_mean[idx]
                 elif metric_type == "variance_and_clipratio":
                     return (
-                        self.prev_variances.get(idx, 0)
-                        + self.latest_clippedans_mean.get(idx, 0) * 10  
+                        self.prev_variances[idx]
+                        + self.latest_clippedans_mean[idx] * 10  
                     )
                 elif metric_type == "highreward_and_clipratio_1":
                     return (
-                        self.latest_reward_mean.get(idx, 0)
-                        + self.latest_clippedans_mean.get(idx, 0) * 10
+                        self.latest_reward_mean[idx]
+                        + self.latest_clippedans_mean[idx] * 10
                     )
                 elif metric_type == "lowreward_and_clipratio_2":
                     return (
-                        -self.latest_reward_mean.get(idx, 0)
-                        + self.latest_clippedans_mean.get(idx, 0) * 10
+                        -self.latest_reward_mean[idx]
+                        + self.latest_clippedans_mean[idx] * 10
                     )
                 else:
                     raise ValueError(

@@ -23,6 +23,7 @@ class GreedyBatchSampler(Sampler):
         
 
     def __iter__(self):
+        print("Refresh a new iter.")
         for batch in self.base_batch_sampler:
             half = len(batch) // 2  # we want to keep half of the indices
             if self._iter_count<=1:

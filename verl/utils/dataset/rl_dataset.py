@@ -213,14 +213,18 @@ class RLHFDataset(Dataset):
             # Otherwise, just use the DataFrame's index.
             out = self.dataframe.index.tolist()
             
-        self.rawindex2rowindex = {v: k for k, v in enumerate(out)}  
+        self.rawindex2rowindex = {v: k for k, v in enumerate(out)}
+        self.rowindex2rawindex = out  
         return out
     
     def get_all_topics(self):
         return set(self.dataframe["ability"])
     
     def get_all_prompt_ids(self):
+        #legacy, pretty much similar to below
         return list(self.rawindex2rowindex.keys())
+    def get_all_prompt_ids_inorder(self):
+        return self.rowindex2rawindex
 
     def __getitem__(self, item):
         """
