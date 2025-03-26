@@ -44,7 +44,7 @@ def make_map_fn(split: str, source: Any = None):
         instruction = "Let's think step by step and output the final answer within \\boxed{}."
         question = f"{question} {instruction}"
         answer = example.pop('answer')
-        diffliculty = example.pop('difficulty')
+        difficulty = example.pop('difficulty')
 
         data = {
             "data_source": source.value if source else "",
@@ -60,9 +60,11 @@ def make_map_fn(split: str, source: Any = None):
             "extra_info": {
                 'split': split,
                 'index': idx,
-                'difficulty': diffliculty,
+                'difficulty': difficulty,
             }
         }
+        if difficulty is None:
+           raise ValueError("Diffulty is none.")
         return data
     
     return process_fn
@@ -101,19 +103,19 @@ if __name__ == '__main__':
             train_data.append(processed_example)
 
     # Process and save each test dataset separately
-    for test_dataset, test_data_list in zip(test_datasets, test_datasets_data):
-        test_data: List[Dict[str, Any]] = []
-        process_fn = make_map_fn('test', test_dataset)
-        for idx, example in enumerate(test_data_list):
-            processed_example = process_fn(example, idx)
-            if processed_example is not None:
-                test_data.append(processed_example)
+    # for test_dataset, test_data_list in zip(test_datasets, test_datasets_data):
+    #    test_data: List[Dict[str, Any]] = []
+    #    process_fn = make_map_fn('test', test_dataset)
+    #    for idx, example in enumerate(test_data_list):
+    #        processed_example = process_fn(example, idx)
+    #        if processed_example is not None:
+    #            test_data.append(processed_example)
 
-        dataset_name = test_dataset.value.lower()
-        test_df = pd.DataFrame(test_data)
-        makedirs(os.path.join(local_dir, dataset_name), exist_ok=True)
-        test_df.to_parquet(os.path.join(local_dir, f'{dataset_name}/test.parquet'))
-        print(f"{dataset_name} test data size:", len(test_data))
+    #    dataset_name = test_dataset.value.lower()
+    #    test_df = pd.DataFrame(test_data)
+    #    makedirs(os.path.join(local_dir, dataset_name), exist_ok=True)
+    #    test_df.to_parquet(os.path.join(local_dir, f'{dataset_name}/test.parquet'))
+    #    print(f"{dataset_name} test data size:", len(test_data))
 
     # Save training dataset
     print("train data size:", len(train_data))
