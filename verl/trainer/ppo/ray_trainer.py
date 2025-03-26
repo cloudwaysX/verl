@@ -262,13 +262,14 @@ def _compute_response_info(batch):
 def compute_difficulty_metrics(batch):
     metrics = {}
     if 'difficulty' in batch.non_tensor_batch:
+        difficutlty = [d for d in batch.non_tensor_batch["difficulty"] if d is not None] 
         metrics.update({
             'difficulty/mean':
-                np.mean(batch.non_tensor_batch['difficulty']),
+                np.mean(difficulty),
             'difficulty/max':
-                np.max(batch.non_tensor_batch['difficulty']),
+                np.max(difficulty),
             'difficulty/min':
-                np.min(batch.non_tensor_batch['difficulty']),
+                np.min(difficulty),
         })
     return metrics
 

@@ -44,7 +44,7 @@ def make_map_fn(split: str, source: Any = None):
         instruction = "Let's think step by step and output the final answer within \\boxed{}."
         question = f"{question} {instruction}"
         answer = example.pop('answer')
-        difficulty = example.pop('difficulty')
+        difficulty = example.pop('difficulty') if "difficulty" in example else None
 
         data = {
             "data_source": source.value if source else "",
@@ -63,8 +63,6 @@ def make_map_fn(split: str, source: Any = None):
                 'difficulty': difficulty,
             }
         }
-        if difficulty is None:
-           raise ValueError("Diffulty is none.")
         return data
     
     return process_fn
