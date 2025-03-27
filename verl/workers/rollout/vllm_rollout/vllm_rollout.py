@@ -27,10 +27,12 @@ When working with Megatron:
 from typing import List
 from contextlib import contextmanager
 from omegaconf import DictConfig
+import re
 import torch
 import torch.distributed
 from tensordict import TensorDict
 from torch import nn
+from torch.nn.utils.rnn import pad_sequence
 
 from verl import DataProto
 from verl.utils.torch_functional import get_eos_mask, pad_sequence_to_length
@@ -52,6 +54,19 @@ def _pre_process_inputs(pad_token_id, prompt_token_ids: torch.Tensor) -> List[in
     non_pad_index = torch.nonzero(prompt_token_ids != pad_token_id, as_tuple=False)[0][0]
     token_ids = prompt_token_ids[non_pad_index:].tolist()
     return token_ids
+
+def _pre_process_extended_inputs(eos_token_id, extended_input_ids: torch.Tensor):
+    # remove the right padding after the initial response
+    non_eos_index = torch.nonzero(extended_input_ids != eos_token_id, as_tuple=False)
+    if non_eos_index.any():
+        last_valid_index = non_eos_index.nonzero(as_tuple=False)[-1].item()
+        token_ids_tensor = extended_input_ids[:, :last_valid_index+1]
+    else:
+        token_ids_tensor = torch.tensor([], dtype=extended_input_ids.dtype)
+    return token_ids_tensor.tolist()
+    
+
+
 
 
 class vLLMRollout(BaseRollout):
@@ -154,7 +169,7 @@ class vLLMRollout(BaseRollout):
             setattr(self.sampling_params, key, value)
 
     @torch.no_grad()
-    def generate_sequences(self, prompts: DataProto, **kwargs) -> DataProto:
+    def generate_sequences(self, prompts: DataProto, append_answer: bool = False, **kwargs) -> DataProto:
         # rebuild vllm cache engine
         if self.config.free_cache_engine:
             self.inference_engine.init_cache_engine()
@@ -195,18 +210,54 @@ class vLLMRollout(BaseRollout):
 
         # TODO(sgm): disable logprob when recompute_log_prob is enable
         # if n = 1: (bs, response_length) ; if n > 1: (bs * n, response_length)
-        response = output[0].to(idx.device)
-        log_probs = output[1].to(idx.device)
-
-        if response.shape[1] < self.config.response_length:
-            response = pad_sequence_to_length(response, self.config.response_length, self.pad_token_id)
-            log_probs = pad_sequence_to_length(log_probs, self.config.response_length, self.pad_token_id)
-
+        initial_response = output[0].to(idx.device)
         if self.config.n > 1 and do_sample:
             idx = idx.repeat_interleave(self.config.n, dim=0)
             attention_mask = attention_mask.repeat_interleave(self.config.n, dim=0)
             position_ids = position_ids.repeat_interleave(self.config.n, dim=0)
             batch_size = batch_size * self.config.n
+        
+        # =========Second Generation Pass: Generate final answer using COT =========
+        # (yifangc): implement this
+        if append_answer:
+            # tokenize the final answer
+            finalans_token = self.tokenizer.encode(
+                'Final Answer: ', add_special_tokens=False, return_tensors='pt'
+            ).to(idx.device)
+            # Convert the prompt+initial response to a list of list of token ids
+            extend_input_idx_list = []
+            for i, seq in enumerate(initial_response):
+                striped_seq = _pre_process_extended_inputs(
+                    self.tokenizer.eos_token_id, seq
+                )
+                striped_seq = (
+                    idx_list[i // self.config.n] + striped_seq + [finalans_token]
+                )
+                extend_input_idx_list.append(striped_seq)
+
+            kwargs2 = {
+                'n': 1,
+                'max_tokens': 50,
+            }
+            with self.update_sampling_params(**kwargs2):
+                output = self.inference_engine.generate(
+                    prompts=None,  # because we have already convert it to prompt token id
+                    sampling_params=self.sampling_params,
+                    prompt_token_ids=extend_input_idx_list,
+                    use_tqdm=False)
+            second_response = output[0].to(idx.device)
+            response_list = []
+            for i in range(batch_size * self.config.n):
+                seq = extend_input_idx_list[i] + second_response[i]
+                seq = seq[len(idx_list[i//self.config.n]):]
+                response_list.append(seq)
+            response = pad_sequence(response_list, batch_first=True, padding_value=self.pad_token_id)
+        else:
+            response = initial_response
+        
+        if response.shape[1] < self.config.response_length:
+            response = pad_sequence_to_length(response, self.config.response_length, self.pad_token_id)
+
         seq = torch.cat([idx, response], dim=-1)
 
         response_length = response.size(1)
