@@ -170,7 +170,9 @@ class vLLMRollout(BaseRollout):
             setattr(self.sampling_params, key, value)
 
     @torch.no_grad()
-    def generate_sequences(self, prompts: DataProto, force_append_answer: bool = False, **kwargs) -> DataProto:
+    def generate_sequences(self, prompts: DataProto,  **kwargs) -> DataProto:
+        
+        force_append_answer = kwargs.pop('force_append_answer', False)
         # rebuild vllm cache engine
         if self.config.free_cache_engine:
             self.inference_engine.init_cache_engine()
