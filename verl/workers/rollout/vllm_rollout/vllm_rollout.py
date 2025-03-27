@@ -232,7 +232,7 @@ class vLLMRollout(BaseRollout):
                     self.tokenizer.eos_token_id, seq
                 )
                 striped_seq = (
-                    idx_list[i // self.config.n] + striped_seq + [finalans_token]
+                    idx_list[i // self.config.n] + striped_seq + finalans_token
                 )
                 extend_input_idx_list.append(striped_seq)
 
