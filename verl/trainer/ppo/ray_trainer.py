@@ -1215,7 +1215,10 @@ class RayPPOTrainer(object):
                 with _timer('step', timing_raw):
                     # generate a batch
                     with _timer('gen', timing_raw):
-                        gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
+                        gen_batch_output = self.actor_rollout_wg.generate_sequences(
+                                gen_batch,
+                                force_append_answers = self.config.active_strategy.force_append_answers
+                                )
             
 
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:

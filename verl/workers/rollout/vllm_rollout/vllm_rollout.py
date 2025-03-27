@@ -151,6 +151,7 @@ class vLLMRollout(BaseRollout):
         self.sampling_params = SamplingParams(**kwargs)
 
         self.pad_token_id = tokenizer.pad_token_id
+        self.tokenizer = tokenizer
 
     @contextmanager
     def update_sampling_params(self, **kwargs):
@@ -169,7 +170,7 @@ class vLLMRollout(BaseRollout):
             setattr(self.sampling_params, key, value)
 
     @torch.no_grad()
-    def generate_sequences(self, prompts: DataProto, append_answer: bool = False, **kwargs) -> DataProto:
+    def generate_sequences(self, prompts: DataProto, force_append_answer: bool = False, **kwargs) -> DataProto:
         # rebuild vllm cache engine
         if self.config.free_cache_engine:
             self.inference_engine.init_cache_engine()
@@ -219,11 +220,11 @@ class vLLMRollout(BaseRollout):
         
         # =========Second Generation Pass: Generate final answer using COT =========
         # (yifangc): implement this
-        if append_answer:
+        if force_append_answer:
             # tokenize the final answer
-            finalans_token = self.tokenizer.encode(
-                'Final Answer: ', add_special_tokens=False, return_tensors='pt'
-            ).to(idx.device)
+            finalans_token = self.inference_engine.tokenizer.encode(
+                '\n\n**Final Answer**: ', add_special_tokens=False
+            )
             # Convert the prompt+initial response to a list of list of token ids
             extend_input_idx_list = []
             for i, seq in enumerate(initial_response):
@@ -248,15 +249,15 @@ class vLLMRollout(BaseRollout):
             second_response = output[0].to(idx.device)
             response_list = []
             for i in range(batch_size * self.config.n):
-                seq = extend_input_idx_list[i] + second_response[i]
-                seq = seq[len(idx_list[i//self.config.n]):]
-                response_list.append(seq)
+                orig_prompt_len = len(idx_list[i//self.config.n])
+                seq = extend_input_idx_list[i][orig_prompt_len:]+second_response[i].tolist()
+                response_list.append(torch.tensor(seq, device=idx.device, dtype=idx.dtype))
             response = pad_sequence(response_list, batch_first=True, padding_value=self.pad_token_id)
         else:
             response = initial_response
-        
+        max_response_length = self.config.response_length + 50 if force_append_answer else self.config.response_length
         if response.shape[1] < self.config.response_length:
-            response = pad_sequence_to_length(response, self.config.response_length, self.pad_token_id)
+            response = pad_sequence_to_length(response, max_response_length, self.pad_token_id)
 
         seq = torch.cat([idx, response], dim=-1)
 
