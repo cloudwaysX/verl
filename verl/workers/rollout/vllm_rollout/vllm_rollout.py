@@ -151,7 +151,9 @@ class vLLMRollout(BaseRollout):
         self.sampling_params = SamplingParams(**kwargs)
 
         self.pad_token_id = tokenizer.pad_token_id
-        self.tokenizer = tokenizer
+        self.finalans_token = tokenizer.encode(
+            '\n\n**Final Answer**: ', add_special_tokens=False
+        )
 
     @contextmanager
     def update_sampling_params(self, **kwargs):
@@ -224,9 +226,7 @@ class vLLMRollout(BaseRollout):
         # (yifangc): implement this
         if force_append_answer:
             # tokenize the final answer
-            finalans_token = self.inference_engine.tokenizer.encode(
-                '\n\n**Final Answer**: ', add_special_tokens=False
-            )
+            finalans_token = self.finalans_token
             # Convert the prompt+initial response to a list of list of token ids
             extend_input_idx_list = []
             for i, seq in enumerate(initial_response):
