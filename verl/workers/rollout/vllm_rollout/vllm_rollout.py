@@ -57,10 +57,12 @@ def _pre_process_inputs(pad_token_id, prompt_token_ids: torch.Tensor) -> List[in
 
 def _pre_process_extended_inputs(eos_token_id, extended_input_ids: torch.Tensor):
     # remove the right padding after the initial response
-    non_eos_index = torch.nonzero(extended_input_ids != eos_token_id, as_tuple=False)
+    # print("debug 2", extended_input_ids.shape)
+    non_eos_index = extended_input_ids != eos_token_id
+    # print("debug 3", non_eos_index.shape)
     if non_eos_index.any():
         last_valid_index = non_eos_index.nonzero(as_tuple=False)[-1].item()
-        token_ids_tensor = extended_input_ids[:, :last_valid_index+1]
+        token_ids_tensor = extended_input_ids[:last_valid_index+1]
     else:
         token_ids_tensor = torch.tensor([], dtype=extended_input_ids.dtype)
     return token_ids_tensor.tolist()
@@ -229,10 +231,8 @@ class vLLMRollout(BaseRollout):
             finalans_token = self.finalans_token
             # Convert the prompt+initial response to a list of list of token ids
             extend_input_idx_list = []
-            for i, seq in enumerate(initial_response):
-                striped_seq = _pre_process_extended_inputs(
-                    self.tokenizer.eos_token_id, seq
-                )
+            for i in range(batch_size):
+                striped_seq = _pre_process_extended_inputs(eos_token_id, initial_response[i])
                 striped_seq = (
                     idx_list[i // self.config.n] + striped_seq + finalans_token
                 )
@@ -250,7 +250,7 @@ class vLLMRollout(BaseRollout):
                     use_tqdm=False)
             second_response = output[0].to(idx.device)
             response_list = []
-            for i in range(batch_size * self.config.n):
+            for i in range(batch_size):
                 orig_prompt_len = len(idx_list[i//self.config.n])
                 seq = extend_input_idx_list[i][orig_prompt_len:]+second_response[i].tolist()
                 response_list.append(torch.tensor(seq, device=idx.device, dtype=idx.dtype))

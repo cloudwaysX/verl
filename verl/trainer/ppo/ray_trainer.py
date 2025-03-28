@@ -262,7 +262,7 @@ def _compute_response_info(batch):
 def compute_difficulty_metrics(batch):
     metrics = {}
     if 'difficulty' in batch.non_tensor_batch:
-        difficutlty = [d for d in batch.non_tensor_batch["difficulty"] if d is not None] 
+        difficulty = [d for d in batch.non_tensor_batch["difficulty"] if d is not None] 
         metrics.update({
             'difficulty/mean':
                 np.mean(difficulty),
@@ -1215,8 +1215,7 @@ class RayPPOTrainer(object):
                 with _timer('step', timing_raw):
                     # generate a batch
                     with _timer('gen', timing_raw):
-                        kwargs = {'force_append_answer': self.config.active_strategy.force_append_answers}
-                        gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch,**kwargs)
+                        gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
 
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
                         with _timer('gen_max', timing_raw):
