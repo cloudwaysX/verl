@@ -303,7 +303,7 @@ class DataParallelPPOActor(BasePPOActor):
                                                     ref_logprob=ref_log_prob,
                                                     kl_penalty=self.config.kl_loss_type)
                         kl_loss = masked_mean(kld, response_mask)
-                        kl_loss = torch.minimum(kl_loss, torch.tensor(self.config.kl_loss_max, device=kl_loss.device))
+                        kl_loss = torch.fmin(kl_loss, torch.tensor(self.config.kl_loss_max, device=kl_loss.device))
 
                         policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
                         metrics['actor/kl_loss'] = kl_loss.detach().item()
