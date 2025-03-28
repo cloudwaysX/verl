@@ -40,6 +40,7 @@ from verl.workers.rollout.base import BaseRollout
 from verl.third_party.vllm import LLM, vllm_version
 from verl.third_party.vllm import parallel_state as vllm_ps
 from vllm import SamplingParams
+from deepscaler.globals import OAI_RM_MODEL, THOUGHT_DELIMITER_START, THOUGHT_DELIMITER_END
 
 # TODO
 # 1. support pp in vllm
@@ -156,6 +157,12 @@ class vLLMRollout(BaseRollout):
         self.finalans_token = tokenizer.encode(
             '\n\n**Final Answer**: ', add_special_tokens=False
         )
+        self.thought_delimiter_start = tokenizer.encode(
+            THOUGHT_DELIMITER_START, add_special_tokens=False
+        )
+        self.thought_delimiter_end = tokenizer.encode(
+            THOUGHT_DELIMITER_END, add_special_tokens=False
+        )
 
     @contextmanager
     def update_sampling_params(self, **kwargs):
@@ -228,7 +235,7 @@ class vLLMRollout(BaseRollout):
         # (yifangc): implement this
         if force_append_answer:
             # tokenize the final answer
-            finalans_token = self.finalans_token
+            finalans_token = self.thought_delimiter_end + self.finalans_token
             # Convert the prompt+initial response to a list of list of token ids
             extend_input_idx_list = []
             for i in range(batch_size):

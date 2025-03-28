@@ -367,7 +367,10 @@ def compute_data_metrics(batch, use_critic=True):
     }
     
     # record the clip per prompt
-    clip_persample = torch.eq(response_length, max_response_length).float()
+    clip_persample = torch.logic_or(
+            torch.eq(response_length, max_response_length).float(),
+            torch.gt(prompt_length, max_prompt_length).float()
+        )
     return metrics, clip_persample
 
 
