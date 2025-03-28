@@ -610,7 +610,12 @@ class RayPPOTrainer(object):
                 elif metric_type == "clipratio_and_variance":
                     return (
                         self.prev_variances[idx]*10
-                        + self.latest_clippedans_mean[idx]  
+                        + self.latest_clippedans_mean[idx]
+                    )
+                elif metric_type == "lowreward_and_variance":
+                    return (
+                        self.prev_variances[idx] * 10
+                        - self.latest_reward_mean[idx]
                     )
                 elif metric_type == "highreward_and_clipratio_1":
                     return (

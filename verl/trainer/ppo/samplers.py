@@ -33,6 +33,7 @@ class GreedyBatchSampler(Sampler):
                 selected = sorted_batch[:half]
             elif random.random() < self.greedy_exploration_ratio:
                 # Randomly sample half the batch indices.
+                print(f"With prob {self.greedy_exploration_ratio}, randomly select half the indices.")
                 selected = random.sample(batch, half)
             else:
                 print(f"With prob {1-self.greedy_exploration_ratio}, select top {self.greedy_top_percent*100}% to {self.greedy_top_percent*100+50}%")   
