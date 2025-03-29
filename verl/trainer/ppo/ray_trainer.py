@@ -877,7 +877,7 @@ class RayPPOTrainer(object):
             print('validation generation end')
 
             # Store generated outputs
-            output_ids = test_output_gen_batch.batch['responses']
+            output_ids = test_output_gen_batch.batch['responses'] if 'edit_responses' not in test_output_gen_batch.batch.keys() else test_output_gen_batch.batch['edit_responses']
             output_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in output_ids]
             sample_outputs.extend(output_texts)
 
