@@ -231,8 +231,36 @@ class vLLMRollout(BaseRollout):
             position_ids = position_ids.repeat_interleave(self.config.n, dim=0)
             batch_size = batch_size * self.config.n
         
+        # Make sure initial_response has correct length before calculating position IDs and attention masks
+        if initial_response.shape[1] < self.config.response_length:
+            initial_response = pad_sequence_to_length(
+                initial_response, 
+                self.config.response_length, 
+                self.pad_token_id
+            )
+        
+        # Create initial response attention mask and position IDs
+        response_length = initial_response.size(1)
+        delta_position_id = torch.arange(1, response_length + 1, device=position_ids.device)
+        delta_position_id = delta_position_id.unsqueeze(0).repeat(batch_size, 1)
+        
+        initial_response_position_ids = position_ids[:, -1:] + delta_position_id
+        initial_response_attention_mask = get_eos_mask(
+            response_id=initial_response, 
+            eos_token=eos_token_id, 
+            dtype=attention_mask.dtype
+        )
+        
+        # Prepare the initial sequence data
+        initial_seq = torch.cat([idx, initial_response], dim=-1)
+        initial_position_ids = torch.cat([position_ids, initial_response_position_ids], dim=-1)
+        initial_attention_mask = torch.cat([attention_mask, initial_response_attention_mask], dim=-1)
+        
+        # Initialize edit_response and edit_attention_mask as None
+        edit_response = None
+        edit_attention_mask = None
+        
         # =========Second Generation Pass: Generate final answer using COT =========
-        # (yifangc): implement this
         if force_append_answer:
             # tokenize the final answer
             finalans_token = self.thought_delimiter_end + self.finalans_token
@@ -256,44 +284,53 @@ class vLLMRollout(BaseRollout):
                     prompt_token_ids=extend_input_idx_list,
                     use_tqdm=False)
             second_response = output[0].to(idx.device)
+            
+            # Create the edited response by combining initial response with second response
             response_list = []
             for i in range(batch_size):
                 orig_prompt_len = len(idx_list[i//self.config.n])
                 seq = extend_input_idx_list[i][orig_prompt_len:]+second_response[i].tolist()
                 response_list.append(torch.tensor(seq, device=idx.device, dtype=idx.dtype))
-            response = pad_sequence(response_list, batch_first=True, padding_value=self.pad_token_id)
-        else:
-            response = initial_response
-        max_response_length = self.config.response_length + 50 if force_append_answer else self.config.response_length
-        if response.shape[1] < self.config.response_length:
-            response = pad_sequence_to_length(response, max_response_length, self.pad_token_id)
-
-        seq = torch.cat([idx, response], dim=-1)
-
-        response_length = response.size(1)
-        delta_position_id = torch.arange(1, response_length + 1, device=position_ids.device)
-        delta_position_id = delta_position_id.unsqueeze(0).repeat(batch_size, 1)
-
-        # TODO(sgm): fix position_ids on right_pad
-        # prompt: left pad + response: right pad
-        # attention_mask: [0,0,0,0,1,1,1,1, | 1,1,1,0,0,0,0,0]
-        # position_ids:   [0,0,0,0,0,1,2,3, | 4,5,6,7,8,9,10,11]
-        response_position_ids = position_ids[:, -1:] + delta_position_id
-        position_ids = torch.cat([position_ids, response_position_ids], dim=-1)
-        response_attention_mask = get_eos_mask(response_id=response, eos_token=eos_token_id, dtype=attention_mask.dtype)
-        attention_mask = torch.cat((attention_mask, response_attention_mask), dim=-1)
+            
+            edit_response = pad_sequence(response_list, batch_first=True, padding_value=self.pad_token_id)
+            
+            # Make sure edit_response has correct length before calculating attention mask
+            if edit_response.shape[1] < self.config.response_length + 50:
+                edit_response = pad_sequence_to_length(
+                    edit_response, 
+                    self.config.response_length + 50, 
+                    self.pad_token_id
+                )
+            
+            # Create edit_attention_mask based on edit_response
+            edit_attention_mask = get_eos_mask(
+                response_id=edit_response, 
+                eos_token=eos_token_id, 
+                dtype=attention_mask.dtype
+            )
 
         # all the tp ranks should contain the same data here. data in all ranks are valid
         batch = TensorDict(
             {
                 'prompts': idx,
-                'responses': response,
-                'input_ids': seq,  # here input_ids become the whole sentences
-                # 'old_log_probs': log_probs, # we will recompute old log prob with actor
-                'attention_mask': attention_mask,
-                'position_ids': position_ids
+                'responses': initial_response,  # Always use initial_response
+                'input_ids': initial_seq,  # prompt + initial_response
+                'attention_mask': initial_attention_mask,  # Always use initial_attention_mask
+                'position_ids': initial_position_ids,  # Always use initial_position_ids
             },
             batch_size=batch_size)
+        
+        # Add edit_ fields if force_append_answer is True
+        if force_append_answer:
+            batch.update({
+                'edit_responses': edit_response,
+                'edit_attention_mask': edit_attention_mask,
+            })
+        else:
+            batch.update({
+                'edit_responses': None,
+                'edit_attention_mask': None,
+            })
 
         # free vllm cache engine
         if self.config.free_cache_engine:
