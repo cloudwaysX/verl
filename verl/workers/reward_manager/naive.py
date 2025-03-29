@@ -33,7 +33,7 @@ class NaiveRewardManager:
         if 'rm_scores' in data.batch.keys():
             return data.batch['rm_scores']
         
-        if data[0].batch['edit_responses'] is not None:
+        if 'edit_responses' in data.batch:
             response_key = 'edit_responses'
             attention_mask_key = 'edit_attention_mask'
         else:

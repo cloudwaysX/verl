@@ -326,11 +326,6 @@ class vLLMRollout(BaseRollout):
                 'edit_responses': edit_response,
                 'edit_attention_mask': edit_attention_mask,
             })
-        else:
-            batch.update({
-                'edit_responses': None,
-                'edit_attention_mask': None,
-            })
 
         # free vllm cache engine
         if self.config.free_cache_engine:
