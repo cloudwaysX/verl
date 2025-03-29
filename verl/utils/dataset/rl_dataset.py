@@ -28,7 +28,6 @@ from verl.utils.model import compute_position_id_with_mask
 import verl.utils.torch_functional as verl_F
 
 def selection_for_math_difficulty(dataframe, lower_bound=3, upper_bound=5):
-    
     assert "difficulty" in dataframe["extra_info"][0], "difficulty is not in the extra_info"
     assert "ability" in dataframe, "ability is not in the data frame"
     # Select the rows with difficulty between the lower and upper bounds
@@ -38,7 +37,6 @@ def selection_for_math_difficulty(dataframe, lower_bound=3, upper_bound=5):
     return dataframe[selected_rows]
 
 def selection_for_mathamc_difficulty(dataframe, lower_bound=3, upper_bound=5):
-    
     assert "difficulty" in dataframe["extra_info"][0], "difficulty is not in the extra_info"
     assert "ability" in dataframe, "ability is not in the data frame"
     # Select the rows with difficulty between the lower and upper bounds
@@ -50,6 +48,24 @@ def selection_for_mathamc_difficulty(dataframe, lower_bound=3, upper_bound=5):
         axis=1)
     selected_rows = selected_rows1 | selected_rows2
     return dataframe[selected_rows]
+
+def selection_for_deepscaler_difficulty(dataframe, lower_bound=3, upper_bound=8):
+    assert "difficulty" in dataframe["extra_info"][0], "difficulty is not in the extra_info"
+    assert "ability" in dataframe, "ability is not in the data frame"
+    # Select the rows with difficulty between the lower and upper bounds
+    selected_rows = dataframe.apply(
+        lambda x: (x["extra_info"]["difficulty"] is None) or (lower_bound<=x["extra_info"]["difficulty"] <=upper_bound),
+        axis=1)
+    return dataframe[selected_rows]
+
+def selection_for_deepscaler_difficulty38(dataframe, lower_bound=3, upper_bound=8):
+    return selection_for_deepscaler_difficulty(dataframe, lower_bound, upper_bound)
+
+def selection_for_deepscaler_difficulty37(dataframe, lower_bound=3, upper_bound=7):
+    return selection_for_deepscaler_difficulty(dataframe, lower_bound, upper_bound)
+
+def selection_for_deepscaler_difficulty26(dataframe, lower_bound=2, upper_bound=6):
+    return selection_for_deepscaler_difficulty(dataframe, lower_bound, upper_bound)
 
 def collate_fn(data_list: list[dict]) -> dict:
     tensors = defaultdict(list)
@@ -173,6 +189,12 @@ class RLHFDataset(Dataset):
                 self.dataframe = selection_for_math_difficulty(self.dataframe)
             elif preselect in ["mathamc_difficulty"]:
                 self.dataframe = selection_for_mathamc_difficulty(self.dataframe)
+            elif preselect in ["deepscaler_difficulty38"]:
+                self.dataframe = selection_for_deepscaler_difficulty38(self.dataframe)
+            elif preselect in ["deepscaler_difficulty37"]:
+                self.dataframe = selection_for_deepscaler_difficulty37(self.dataframe)
+            elif preselect in ["deepscaler_difficulty26"]:
+                self.dataframe = selection_for_deepscaler_difficulty26(self.dataframe)
             else:
                 raise ValueError(f"No preselect method {preselect} found")
         print(f"The len of final dataset is {len(self.dataframe)}")
