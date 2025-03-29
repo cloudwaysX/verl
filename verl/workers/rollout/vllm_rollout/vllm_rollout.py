@@ -47,6 +47,8 @@ from deepscaler.globals import OAI_RM_MODEL, THOUGHT_DELIMITER_START, THOUGHT_DE
 # 2. passing tokenizer is not necessary? no encoding/decoding is happending here
 # 3. simplify init logics
 
+MAX_FINAL_ANSWER_LENGTH = 30
+
 
 # NOTE(sgm): add for verl. We can optimize it by making the dataloader yield List[int] without padding.
 def _pre_process_inputs(pad_token_id, prompt_token_ids: torch.Tensor) -> List[int]:
@@ -275,7 +277,7 @@ class vLLMRollout(BaseRollout):
 
             kwargs2 = {
                 'n': 1,
-                'max_tokens': 50,
+                'max_tokens': MAX_FINAL_ANSWER_LENGTH,
             }
             with self.update_sampling_params(**kwargs2):
                 output = self.inference_engine.generate(
@@ -295,10 +297,10 @@ class vLLMRollout(BaseRollout):
             edit_response = pad_sequence(response_list, batch_first=True, padding_value=self.pad_token_id)
             
             # Make sure edit_response has correct length before calculating attention mask
-            if edit_response.shape[1] < self.config.response_length + 50:
+            if edit_response.shape[1] < self.config.response_length + MAX_FINAL_ANSWER_LENGTH:
                 edit_response = pad_sequence_to_length(
                     edit_response, 
-                    self.config.response_length + 50, 
+                    self.config.response_length + MAX_FINAL_ANSWER_LENGTH, 
                     self.pad_token_id
                 )
             

@@ -35,13 +35,13 @@ class NaiveRewardManager:
         
         if 'edit_responses' in data.batch:
             response_key = 'edit_responses'
+            attention_mask_key = 'edit_attention_mask'
         else:
             response_key = 'responses'
-        # This only used to compute the valid response length
-        # we still use the original attention_mask to compute the reward
-        attention_mask_key = 'attention_mask'
+            attention_mask_key = 'attention_mask'
 
-        reward_tensor = torch.zeros_like(data.batch[response_key], dtype=torch.float32)
+        # When compute the reward, always use the initial response
+        reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
 
         already_print_data_sources = {}
 
@@ -53,6 +53,7 @@ class NaiveRewardManager:
             prompt_length = prompt_ids.shape[-1]
 
             valid_prompt_length = data_item.batch[attention_mask_key][:prompt_length].sum()
+            initial_response_length = data_item.batch['attention_mask'][prompt_length:].sum()
             valid_prompt_ids = prompt_ids[-valid_prompt_length:]
 
             response_ids = data_item.batch[response_key]
@@ -75,7 +76,9 @@ class NaiveRewardManager:
                 ground_truth=ground_truth,
                 extra_info=extra_info,
             )
-            reward_tensor[i, valid_response_length - 1] = score
+            
+            # When compute the reward, always use the initial response
+            reward_tensor[i, initial_response_length - 1] = score
 
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0

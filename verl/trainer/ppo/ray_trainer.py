@@ -809,10 +809,10 @@ class RayPPOTrainer(object):
                 if raw_index in set(self.tracked_samples_idx):
                     current_reward = batch.batch['token_level_scores'][i].sum(dim=-1).item()
                     if "prompt" not in self.tracked_texts[raw_index]:
-                        self.tracked_texts[raw_index]["prompt"] = self.tokenizer.decode(batch.batch['input_ids'][i], skip_special_tokens=True)
+                        self.tracked_texts[raw_index]["prompt"] = self.tokenizer.decode(batch.batch['prompts'][i], skip_special_tokens=True)
                     if current_reward in self.tracked_texts[raw_index]:
                         continue
-                    output_id = batch.batch['responses'][i]
+                    output_id = batch.batch['responses'][i] if "edit_responses" not in batch.batch.keys() else batch.batch['edit_responses'][i]
                     output_text = self.tokenizer.decode(output_id, skip_special_tokens=True) 
                     self.tracked_texts[raw_index][current_reward] = output_text
                 
