@@ -35,10 +35,11 @@ class NaiveRewardManager:
         
         if 'edit_responses' in data.batch:
             response_key = 'edit_responses'
-            attention_mask_key = 'edit_attention_mask'
         else:
             response_key = 'responses'
-            attention_mask_key = 'attention_mask'
+        # This only used to compute the valid response length
+        # we still use the original attention_mask to compute the reward
+        attention_mask_key = 'attention_mask'
 
         reward_tensor = torch.zeros_like(data.batch[response_key], dtype=torch.float32)
 
