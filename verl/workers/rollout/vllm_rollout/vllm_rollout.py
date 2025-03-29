@@ -377,9 +377,16 @@ class vLLMRollout(BaseRollout):
         initial_position_ids = torch.cat([position_ids, initial_response_position_ids], dim=-1)
         initial_attention_mask = torch.cat([attention_mask, initial_response_attention_mask], dim=-1)
         
-        # Initialize edit_response and edit_attention_mask as None
-        edit_response = None
-        edit_attention_mask = None
+        # all the tp ranks should contain the same data here. data in all ranks are valid
+        batch = TensorDict(
+            {
+                'prompts': idx,
+                'responses': initial_response,  # Always use initial_response
+                'input_ids': initial_seq,  # prompt + initial_response
+                'attention_mask': initial_attention_mask,  # Always use initial_attention_mask
+                'position_ids': initial_position_ids,  # Always use initial_position_ids
+            },
+            batch_size=batch_size)
         
         # =========Second Generation Pass: Generate final answer using COT =========
         if force_append_answer:
@@ -429,24 +436,12 @@ class vLLMRollout(BaseRollout):
                 eos_token=eos_token_id, 
                 dtype=attention_mask.dtype
             )
+            edit_attention_mask = torch.cat([attention_mask, edit_attention_mask], dim=-1)
 
-        # all the tp ranks should contain the same data here. data in all ranks are valid
-        batch = TensorDict(
-            {
-                'prompts': idx,
-                'responses': initial_response,  # Always use initial_response
-                'input_ids': initial_seq,  # prompt + initial_response
-                'attention_mask': initial_attention_mask,  # Always use initial_attention_mask
-                'position_ids': initial_position_ids,  # Always use initial_position_ids
-            },
-            batch_size=batch_size)
-        
-        # Add edit_ fields if force_append_answer is True
-        # if force_append_answer:
-        #     batch.update({
-        #         'edit_responses': edit_response,
-        #         'edit_attention_mask': edit_attention_mask,
-        #     })
+            batch.update({
+                'edit_responses': edit_response,
+                'edit_attention_mask': edit_attention_mask,
+            })
 
         # free vllm cache engine
         if self.config.free_cache_engine:
