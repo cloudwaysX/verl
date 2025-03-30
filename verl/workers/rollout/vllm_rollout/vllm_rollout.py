@@ -47,7 +47,7 @@ from deepscaler.globals import OAI_RM_MODEL, THOUGHT_DELIMITER_START, THOUGHT_DE
 # 2. passing tokenizer is not necessary? no encoding/decoding is happending here
 # 3. simplify init logics
 
-MAX_FINAL_ANSWER_LENGTH = 30
+MAX_FINAL_ANSWER_LENGTH = 50
 
 
 # NOTE(sgm): add for verl. We can optimize it by making the dataloader yield List[int] without padding.

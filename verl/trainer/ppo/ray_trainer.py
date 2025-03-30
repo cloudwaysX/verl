@@ -184,13 +184,14 @@ def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_re
                                                                         index=index,
                                                                         return_std=return_std)
         if return_std:
-            advantages, rewards_std, rewards_mean = \
-                advantages["advantages"], advantages["rewards_std"], advantages["rewards_mean"]
+            advantages, rewards_std, rewards_mean, edit2correct_counts = \
+                advantages["advantages"], advantages["rewards_std"], advantages["rewards_mean"], advantages["edit2correct_counts"]
         data.batch['advantages'] = advantages
         data.batch['returns'] = returns
         if return_std:
             data.batch['rewards_std'] = rewards_std
             data.batch['rewards_mean'] = rewards_mean
+            data.batch['edit2correct_counts'] = edit2correct_counts
     elif adv_estimator == AdvantageEstimator.REINFORCE_PLUS_PLUS:
         assert not return_std, 'return_std is not supported in REINFORCE_PLUS_PLUS'
         token_level_rewards = data.batch['token_level_rewards']
@@ -481,6 +482,7 @@ class RayPPOTrainer(object):
         self.visit_counts = {} # Store the number of visits for each unique samples
         self.latest_reward_mean = {} # Store the latest reward mean for each unique samples
         self.latest_clippedans_mean = {} # Store the latest clipped answer mean for each unique samples
+        self.latest_edit2correct_counts = {} # Store the latest edit2correct counts for each unique samples
 
 
     def _validate_config(self):
@@ -771,6 +773,7 @@ class RayPPOTrainer(object):
             # track the reward mean
             rewardmean_est_error += np.absolute(batch.batch['rewards_mean'][i].item()-self.latest_reward_mean[unique_id])/len(unique_ids)
             self.latest_reward_mean[unique_id] = batch.batch['rewards_mean'][i].item()
+            self.latest_edit2correct_counts[unique_id] = batch.batch['edit2correct_counts'][i].item()
             total_rewardmean += np.absolute(self.latest_reward_mean[unique_id])/len(unique_ids)
          
         total_clipppedans_mean = 0
@@ -1012,7 +1015,7 @@ class RayPPOTrainer(object):
         with open(local_latest_checkpointed_iteration, 'w') as f:
             f.write(str(self.global_steps))
 
-        # Save prev_variances to file
+        # Save various prompt related stats to file
         prev_variances_path = os.path.join(
             self.config.trainer.default_local_dir, 
             f'global_step_{self.global_steps}', 
@@ -1033,11 +1036,17 @@ class RayPPOTrainer(object):
             f'global_step_{self.global_steps}', 
             'latest_clippedans_mean.pt'
         )
+        latest_edit2correct_counts_path = os.path.join(
+            self.config.trainer.default_local_dir, 
+            f'global_step_{self.global_steps}', 
+            'latest_edit2correct_counts.pt'
+        )
         
         torch.save(self.prev_variances, prev_variances_path)
         torch.save(self.visit_counts, visited_counts_path)
         torch.save(self.latest_reward_mean, latest_rewards_mean_path)
         torch.save(self.latest_clippedans_mean, latest_clippedans_mean_path)
+        torch.save(self.latest_edit2correct_counts, latest_edit2correct_counts_path)
 
     def _load_checkpoint(self):
         if self.config.trainer.resume_mode == 'disable':
@@ -1113,6 +1122,10 @@ class RayPPOTrainer(object):
             self.latest_clippedans_mean = torch.load(latest_clippedans_mean_path)
         else:
             print("No latest_clippedans_mean checkpoint found. Starting fresh.")
+        if os.path.exists(latest_edit2correct_counts_path):
+            self.latest_edit2correct_counts = torch.load(latest_edit2correct_counts_path)
+        else:
+            print("No latest_edit2correct_counts checkpoint found. Starting fresh.")
             
         return 1
 

@@ -132,10 +132,12 @@ def compute_grpo_outcome_advantage(token_level_rewards: torch.Tensor,
     scores = token_level_rewards.sum(dim=-1)
     rewards_std = torch.zeros_like(scores)
     rewards_mean_per_sample = torch.zeros_like(scores)
+    edit2correct_per_sample = torch.zeros_like(scores)
 
     id2score = defaultdict(list)
     id2mean = {}
     id2std = {}
+    id2count_edit2correct = {} # This is used to compute the average number of edits to get the correct response
 
     with torch.no_grad():
         bsz = scores.shape[0]
@@ -148,16 +150,25 @@ def compute_grpo_outcome_advantage(token_level_rewards: torch.Tensor,
             elif len(id2score[idx]) > 1:
                 id2mean[idx] = torch.mean(torch.tensor(id2score[idx]))
                 id2std[idx] = torch.std(torch.tensor([id2score[idx]]))
+                # If we are in binary setting, we only count the number of edits when the score is > 0 and < 1
+                # TODO(yifangc): what if in the future we have more than binary setting?
+                id2count_edit2correct[idx] = torch.Tensor(sum(1 for score in id2score[idx] if score > 0 and score < 1))
             else:
                 raise ValueError(f"no score in prompt index: {idx}")
         for i in range(bsz):
             scores[i] = (scores[i] - id2mean[index[i]]) / (id2std[index[i]] + epsilon)
             rewards_std[i] = id2std[index[i]]
             rewards_mean_per_sample[i] = id2mean[index[i]]
+            edit2correct_per_sample[i] = id2count_edit2correct[index[i]]
         scores = scores.unsqueeze(-1).tile([1, response_length]) * eos_mask
 
     if return_std:
-        return {"advantages": scores, "rewards_std": rewards_std, "rewards_mean": rewards_mean_per_sample}, scores
+        first_return = {"advantages": scores, 
+                        "rewards_std": rewards_std, 
+                        "rewards_mean": rewards_mean_per_sample,
+                        "edit2correct_counts": edit2correct_per_sample
+                        }
+        return first_return, scores
     else:
         return scores, scores
 
