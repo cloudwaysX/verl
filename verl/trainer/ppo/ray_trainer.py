@@ -1366,6 +1366,7 @@ class RayPPOTrainer(object):
                     latest_reward_mean = np.array(list(self.latest_reward_mean.values()))
                     prev_variances = np.array(list(self.prev_variances.values()))
                     latest_clippedans_mean = np.array(list(self.latest_clippedans_mean.values()))
+                    latest_edit2correct_counts = np.array(list(self.latest_edit2correct_counts.values()))
                     metrics.update({"prompts/visit_counts_median": np.median(visit_counts),
                                 "prompts/visit_counts_max": np.max(visit_counts),
                                 "prompts/visit_counts_min": np.min(visit_counts),
@@ -1378,7 +1379,10 @@ class RayPPOTrainer(object):
                                 "prompts/variance_median": np.median(prev_variances),
                                 "prompts/latest_clippedans_mean_median": np.median(latest_clippedans_mean),
                                 "prompts/latest_clippedans_mean_mean": np.mean(latest_clippedans_mean),
-                                "prompts/latest_clippedans_mean_std": np.std(latest_clippedans_mean)})
+                                "prompts/latest_clippedans_mean_std": np.std(latest_clippedans_mean),
+                                "prompts/latest_edit2correct_count_mean": np.mean(latest_edit2correct_counts),
+                                "prompts/latest_edit2correct_count_std": np.std(latest_edit2correct_counts),
+                                "prompts/latest_edit2correct_count_median": np.median(latest_edit2correct_counts)})
                 logger.log(data=metrics, step=self.global_steps)
 
                 if self.global_steps >= self.total_training_steps:

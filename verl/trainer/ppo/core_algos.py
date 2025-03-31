@@ -147,12 +147,13 @@ def compute_grpo_outcome_advantage(token_level_rewards: torch.Tensor,
             if len(id2score[idx]) == 1:
                 id2mean[idx] = torch.tensor(0.0)
                 id2std[idx] = torch.tensor(1.0)
+                id2count_edit2correct[idx] = torch.tensor(0)
             elif len(id2score[idx]) > 1:
                 id2mean[idx] = torch.mean(torch.tensor(id2score[idx]))
                 id2std[idx] = torch.std(torch.tensor([id2score[idx]]))
                 # If we are in binary setting, we only count the number of edits when the score is > 0 and < 1
                 # TODO(yifangc): what if in the future we have more than binary setting?
-                id2count_edit2correct[idx] = torch.Tensor(sum(1 for score in id2score[idx] if score > 0 and score < 1))
+                id2count_edit2correct[idx] = float(sum(1 for score in id2score[idx] if score > 0 and score < 1))
             else:
                 raise ValueError(f"no score in prompt index: {idx}")
         for i in range(bsz):
