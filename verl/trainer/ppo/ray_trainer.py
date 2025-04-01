@@ -1105,6 +1105,7 @@ class RayPPOTrainer(object):
         visited_counts_path = os.path.join(global_step_folder, 'visited_counts.pt')
         latest_rewards_mean_path = os.path.join(global_step_folder, 'latest_rewards_mean.pt')
         latest_clippedans_mean_path = os.path.join(global_step_folder, 'latest_clippedans_mean.pt')
+        latest_edit2correct_counts_path = os.path.join(global_step_folder, 'latest_edit2correct_counts.pt')
 
         if os.path.exists(prev_variances_path):
             self.prev_variances = torch.load(prev_variances_path)
