@@ -95,7 +95,7 @@ class NaiveRewardManager:
                 
                 # If weighted edit score is better than original score, use it
                 if weighted_edit_score > score:
-                    score = edit_score  # Note: We save the full score, not the weighted one
+                    score = weighted_edit_score 
                     sequences_str = edit_sequences_str
             
             # When compute the reward, always use the initial response length for positioning the reward
