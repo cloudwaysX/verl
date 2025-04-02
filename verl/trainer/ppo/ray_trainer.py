@@ -44,7 +44,7 @@ from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path
 from verl.utils.dataset.rl_dataset import RLHFDataset, collate_fn
 from torch.utils.data import RandomSampler, SequentialSampler, BatchSampler
 from torchdata.stateful_dataloader import StatefulDataLoader
-from verl.trainer.ppo.samplers import GreedyBatchSampler
+from verl.trainer.ppo.samplers import GreedyBatchSampler, ScoreOrderedSampler
 
 WorkerType = Type[Worker]
 
@@ -590,49 +590,49 @@ class RayPPOTrainer(object):
             base_sampler = RandomSampler(data_source=self.train_dataset, generator=train_dataloader_generator)
         else:
             base_sampler = SequentialSampler(data_source=self.train_dataset)
+            
+
+        # Define a helper to compute the selection metric.
+        self.rowindex2rawindex = self.train_dataset.get_all_prompt_ids_inorder()
+        def selection_fn(idx):
+            idx =  self.rowindex2rawindex[idx] #TODO
+            metric_type = self.config.active_strategy.selection_metric
+            if metric_type == "variance":
+                return self.prev_variances[idx]
+            elif metric_type == "reward":
+                return -self.latest_reward_mean[idx]
+            elif metric_type == "variance_and_clipratio":
+                return (
+                    self.prev_variances[idx]
+                    + self.latest_clippedans_mean[idx] * 10  
+                )
+            elif metric_type == "clipratio_and_variance":
+                return (
+                    self.prev_variances[idx]*10
+                    + self.latest_clippedans_mean[idx]
+                )
+            elif metric_type == "lowreward_and_variance":
+                return (
+                    self.prev_variances[idx] * 10
+                    - self.latest_reward_mean[idx]
+                )
+            elif metric_type == "highreward_and_clipratio_1":
+                return (
+                    self.latest_reward_mean[idx]
+                    + self.latest_clippedans_mean[idx] * 10
+                )
+            elif metric_type == "lowreward_and_clipratio_2":
+                return (
+                    -self.latest_reward_mean[idx]
+                    + self.latest_clippedans_mean[idx] * 10
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported selection metric: {metric_type}"
+                )
 
         if self.config.active_strategy.strategy_type == "greedy":
             base_batch_sampler = BatchSampler(base_sampler, batch_size=self.config.data.train_batch_size * 2, drop_last=True)
-            # Define a helper to compute the selection metric.
-            print(f"len of base_sampler is", len(base_sampler))
-            print(f"len of base_batch_sampler is", len(base_batch_sampler))
-            self.rowindex2rawindex = self.train_dataset.get_all_prompt_ids_inorder()
-            def selection_fn(idx):
-                idx =  self.rowindex2rawindex[idx] #TODO
-                metric_type = self.config.active_strategy.selection_metric
-                if metric_type == "variance":
-                    return self.prev_variances[idx]
-                elif metric_type == "reward":
-                    return self.latest_reward_mean[idx]
-                elif metric_type == "variance_and_clipratio":
-                    return (
-                        self.prev_variances[idx]
-                        + self.latest_clippedans_mean[idx] * 10  
-                    )
-                elif metric_type == "clipratio_and_variance":
-                    return (
-                        self.prev_variances[idx]*10
-                        + self.latest_clippedans_mean[idx]
-                    )
-                elif metric_type == "lowreward_and_variance":
-                    return (
-                        self.prev_variances[idx] * 10
-                        - self.latest_reward_mean[idx]
-                    )
-                elif metric_type == "highreward_and_clipratio_1":
-                    return (
-                        self.latest_reward_mean[idx]
-                        + self.latest_clippedans_mean[idx] * 10
-                    )
-                elif metric_type == "lowreward_and_clipratio_2":
-                    return (
-                        -self.latest_reward_mean[idx]
-                        + self.latest_clippedans_mean[idx] * 10
-                    )
-                else:
-                    raise ValueError(
-                        f"Unsupported selection metric: {metric_type}"
-                    )
             # Wrap the base batch sampler with the GreedyBatchSampler.
             self.sampler = GreedyBatchSampler(
                 base_batch_sampler=base_batch_sampler,
@@ -641,11 +641,24 @@ class RayPPOTrainer(object):
                 greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio
             )
             print("len of greedy_sampler", len(self.sampler))
+        elif self.config.active_strategy.strategy_type == "fixordergreedy":
+            assert self.config.active_strategy.greedy_top_percent == 0.0, \
+                "greedy_top_percent > 0 is not supported for greedy_fixedorder"
+            assert self.config.active_strategy.greedy_exploration_ratio == 0.0, \
+                "greedy_exploration_ratio > 0 is not supported for greedy_fixedorder"
+            self.sampler = ScoreOrderedSampler(
+                dataset_size=len(self.train_dataset),
+                selection_fn=selection_fn,
+                base_sampler=base_sampler,
+                score_threshold=None, # TODO
+                descending=True
+            )
         else:
             self.sampler = base_sampler
 
         batch_size = self.config.data.train_batch_size
         if self.config.active_strategy.strategy_type == "greedy":
+            # For batch sampler, we don't need to pass in the batch_size.
             self.train_dataloader = StatefulDataLoader(dataset=self.train_dataset,
                                                 num_workers=8,
                                                 collate_fn=collate_fn,
@@ -1206,12 +1219,6 @@ class RayPPOTrainer(object):
             self.tracked_texts = {}
             for idx in self.tracked_samples_idx:
                self.tracked_texts[idx] = {}
-               
-            if self.config.active_strategy == "greedy":
-                if not resume_from_ckpt and (epoch == 0 or epoch==1):
-                    self.sampler.set_inital_epoch(True)
-                else:
-                    self.sampler.set_inital_epoch(False)
             
             for batch_idx, batch_dict in enumerate(self.train_dataloader):
                 # we start from step 1

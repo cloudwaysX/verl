@@ -2,6 +2,80 @@ import random
 import torch
 from torch.utils.data import Sampler, BatchSampler
 
+import torch
+from torch.utils.data import Sampler
+
+class ScoreOrderedSampler(Sampler):
+    def __init__(self, 
+                 dataset_size,
+                 selection_fn,
+                 base_sampler,
+                 score_threshold=None,
+                 descending=True):
+        """
+        A sampler that yields indices ordered by score after the first iteration.
+        First iteration uses the provided base_sampler if available.
+        
+        Args:
+            dataset_size (int): Size of the dataset.
+            selection_fn (callable): A function that takes an index and returns a numeric selection metric.
+            score_threshold (float, optional): If provided, stop iteration when scores fall below this threshold.
+            descending (bool): If True, sort in descending order (highest to lowest scores).
+            base_sampler (Sampler, optional): Sampler to use for first iteration. If None, uses range(dataset_size).
+        """
+        self.dataset_size = dataset_size
+        self.selection_fn = selection_fn
+        self.score_threshold = score_threshold
+        self.descending = descending
+        self.base_sampler = base_sampler
+        self._iter_count = 0
+        
+    def __iter__(self):
+        if self._iter_count == 0:
+            print("First iteration: using provided base sampler")
+            # For the first iteration, use the provided base sampler
+            for idx in self.base_sampler:
+                yield idx
+        else:
+            # iteration_str = "First iteration" if self._iter_count == 0 else f"Iteration {self._iter_count + 1}"
+            # print(f"{iteration_str}: score-ordered sampling")
+            
+            # Calculate and sort scores - we recalculate each iteration
+            all_indices = list(range(self.dataset_size))
+            indices_with_scores = [(idx, self.selection_fn(idx)) for idx in all_indices]
+            sorted_indices_with_scores = sorted(
+                indices_with_scores,
+                key=lambda x: x[1],  # Sort by score
+                reverse=self.descending
+            )
+            
+            # Separate indices and scores
+            sorted_indices = [idx for idx, _ in sorted_indices_with_scores]
+            sorted_scores = [score for _, score in sorted_indices_with_scores]
+            
+            # Yield indices in sorted order until threshold is reached
+            for i, idx in enumerate(sorted_indices):
+                # Check if we've crossed the score threshold
+                if self.score_threshold is not None:
+                    score = sorted_scores[i]
+                    if (self.descending and score < self.score_threshold) or \
+                       (not self.descending and score > self.score_threshold):
+                        print(f"Terminating early: score {score} crossed threshold {self.score_threshold}")
+                        break
+                
+                yield idx
+        
+        self._iter_count += 1
+        
+    def __len__(self):
+        return self.dataset_size
+    
+    def save_state(self):
+        return {'iter_count': self._iter_count}
+    
+    def load_state(self, state):
+        self._iter_count = state['iter_count']
+
 class GreedyBatchSampler(Sampler):
     def __init__(self, 
                  base_batch_sampler, 
@@ -23,7 +97,6 @@ class GreedyBatchSampler(Sampler):
         
 
     def __iter__(self):
-        print("Refresh a new iter.")
         for batch in self.base_batch_sampler:
             half = len(batch) // 2  # we want to keep half of the indices
             if self._iter_count<=1:
