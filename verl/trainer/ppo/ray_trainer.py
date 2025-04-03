@@ -661,7 +661,8 @@ class RayPPOTrainer(object):
                 base_sampler=base_sampler,
                 score_threshold=score_threshold,
                 greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio,
-                descending=True
+                descending=True,
+                shuffled=self.config.active_strategy.get("shufflefixorder", False)
             )
         else:
             self.sampler = base_sampler
@@ -1419,7 +1420,8 @@ class RayPPOTrainer(object):
                                 "prompts/latest_edit2correct_count_max": np.max(latest_edit2correct_counts),
                                 "prompts/est_var_type2_error_max": np.max(est_var_type2_error),
                                 "prompts/est_var_type2_error_median": np.median(est_var_type2_error),
-                                "prompts/est_var_type2_error_std": np.std(est_var_type2_error)})
+                                "prompts/est_var_type2_error_std": np.std(est_var_type2_error),
+                                "epoch_size": len(self.train_dataloader)})
                 logger.log(data=metrics, step=self.global_steps)
 
                 if self.global_steps >= self.total_training_steps:

@@ -12,7 +12,8 @@ class ScoreOrderedSampler(Sampler):
                  base_sampler,
                  score_threshold=None,
                  greedy_exploration_ratio=0.0,
-                 descending=True):
+                 descending=True,
+                 shuffled=False):
         """
         A sampler that yields indices ordered by score after the first iteration.
         First iteration uses the provided base_sampler if available.
@@ -32,6 +33,7 @@ class ScoreOrderedSampler(Sampler):
         self.greedy_exploration_ratio = greedy_exploration_ratio
         self._iter_count = -1
         self.seed = 42
+        self.shuffled = shuffled
         
         print(f"ScoreOrderedSampler: score_threshold={self.score_threshold}, "
               f"greedy_exploration_ratio={self.greedy_exploration_ratio}, "
@@ -100,6 +102,9 @@ class ScoreOrderedSampler(Sampler):
             included_indices = self._calculate_included_indices()
             self._current_included_indices = included_indices
             print(f"Current iteration {self._iter_count}: {len(included_indices)} included indices")
+            if self.shuffled:
+                random.seed(self.seed + self._iter_count+1234)
+                random.shuffle(included_indices)
             for idx in included_indices:
                 yield idx
         
