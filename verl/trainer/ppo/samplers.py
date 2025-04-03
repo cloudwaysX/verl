@@ -30,7 +30,7 @@ class ScoreOrderedSampler(Sampler):
         self.descending = descending
         self.base_sampler = base_sampler
         self.greedy_exploration_ratio = greedy_exploration_ratio
-        self._iter_count = 0
+        self._iter_count = -1
         self.seed = 42
         
         print(f"ScoreOrderedSampler: score_threshold={self.score_threshold}, "
@@ -90,6 +90,7 @@ class ScoreOrderedSampler(Sampler):
         return included_indices
 
     def __iter__(self):
+        self._iter_count += 1
         if self._iter_count == 0:
             print("First iteration: using provided base sampler")
             # For the first iteration, use the provided base sampler
@@ -102,10 +103,8 @@ class ScoreOrderedSampler(Sampler):
             for idx in included_indices:
                 yield idx
         
-        self._iter_count += 1
-        
     def __len__(self):
-        if self._iter_count == 0:
+        if self._iter_count <= 0:
             return len(self.base_sampler)
         else:
             return len(self._current_included_indices)
@@ -133,10 +132,11 @@ class GreedyBatchSampler(Sampler):
         self.selection_fn = selection_fn
         self.greedy_top_percent = greedy_top_percent
         self.greedy_exploration_ratio = greedy_exploration_ratio
-        self._iter_count = 0
+        self._iter_count = -1
         
 
     def __iter__(self):
+        self._iter_count += 1
         for batch in self.base_batch_sampler:
             half = len(batch) // 2  # we want to keep half of the indices
             if self._iter_count<=1:
@@ -156,7 +156,6 @@ class GreedyBatchSampler(Sampler):
                 start = int(self.greedy_top_percent * len(batch))
                 selected = sorted_batch[start:start+half]
             yield selected
-        self._iter_count += 1
         
     def __len__(self):
         return len(self.base_batch_sampler)
