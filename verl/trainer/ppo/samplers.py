@@ -36,6 +36,58 @@ class ScoreOrderedSampler(Sampler):
         print(f"ScoreOrderedSampler: score_threshold={self.score_threshold}, "
               f"greedy_exploration_ratio={self.greedy_exploration_ratio}, "
               f"descending={self.descending}")
+        
+    def _calculate_included_indices(self):
+        """Calculate which indices will be included in the current iteration."""
+        # Set random seed for exploration decisions
+        random.seed(self.seed + self._iter_count)
+        
+        # Calculate scores for all indices
+        all_indices = list(range(self.dataset_size))
+        indices_with_scores = [(idx, self.selection_fn(idx)) for idx in all_indices]
+        
+        # Sort indices based on scores
+        sorted_indices_with_scores = sorted(
+            indices_with_scores,
+            key=lambda x: x[1],  # Sort by score
+            reverse=self.descending
+        )
+        
+        # Extract just the indices
+        sorted_indices = [idx for idx, _ in sorted_indices_with_scores]
+        sorted_scores = [score for _, score in sorted_indices_with_scores]
+        
+        if self.score_threshold is None:
+            # No threshold, include all indices
+            return sorted_indices
+            
+        # Find the split point (first index below threshold)
+        split_idx = 0
+        for i, score in enumerate(sorted_scores):
+            if (self.descending and score < self.score_threshold) or \
+               (not self.descending and score > self.score_threshold):
+                split_idx = i
+                break
+        else:
+            # No indices below threshold
+            return sorted_indices
+        
+        # Split into above and below threshold
+        above_threshold = sorted_indices[:split_idx]
+        below_threshold = sorted_indices[split_idx:]
+        
+        # Randomly select a subset of below-threshold samples
+        explore_count = int(len(below_threshold) * self.greedy_exploration_ratio)
+        exploration_samples = random.sample(below_threshold, explore_count) if explore_count > 0 else []
+        
+        # Combine above-threshold and exploration samples
+        included_indices = above_threshold + exploration_samples
+        
+        # Re-sort the included indices by score
+        idx_to_score = {idx: score for idx, score in zip(sorted_indices, sorted_scores)}
+        included_indices.sort(key=lambda idx: idx_to_score[idx], reverse=self.descending)
+        
+        return included_indices
 
     def __iter__(self):
         if self._iter_count == 0:
@@ -44,43 +96,19 @@ class ScoreOrderedSampler(Sampler):
             for idx in self.base_sampler:
                 yield idx
         else:
-            # iteration_str = "First iteration" if self._iter_count == 0 else f"Iteration {self._iter_count + 1}"
-            # print(f"{iteration_str}: score-ordered sampling")
-            
-            # Calculate and sort scores - we recalculate each iteration
-            all_indices = list(range(self.dataset_size))
-            indices_with_scores = [(idx, self.selection_fn(idx)) for idx in all_indices]
-            sorted_indices_with_scores = sorted(
-                indices_with_scores,
-                key=lambda x: x[1],  # Sort by score
-                reverse=self.descending
-            )
-            
-            # Separate indices and scores
-            sorted_indices = [idx for idx, _ in sorted_indices_with_scores]
-            sorted_scores = [score for _, score in sorted_indices_with_scores]
-            
-            random.seed(self.seed + self._iter_count)
-            
-            # Yield indices in sorted order until threshold is reached
-            for i, idx in enumerate(sorted_indices):
-                # Check if we've crossed the score threshold
-                if self.score_threshold is not None:
-                    score = sorted_scores[i]
-                    if (self.descending and score <= self.score_threshold) or \
-                       (not self.descending and score >= self.score_threshold):
-                        if self.greedy_exploration_ratio == 0.0:
-                            print(f"Score threshold reached: {score} < {self.score_threshold}")
-                            break
-                        elif random.random() < self.greedy_exploration_ratio:
-                            continue
-                
+            included_indices = self._calculate_included_indices()
+            self._current_included_indices = included_indices
+            print(f"Current iteration {self._iter_count}: {len(included_indices)} included indices")
+            for idx in included_indices:
                 yield idx
         
         self._iter_count += 1
         
     def __len__(self):
-        return self.dataset_size
+        if self._iter_count == 0:
+            return len(self.base_sampler)
+        else:
+            return len(self._current_included_indices)
     
     def save_state(self):
         return {'iter_count': self._iter_count}
