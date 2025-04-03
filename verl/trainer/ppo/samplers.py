@@ -70,7 +70,7 @@ class ScoreOrderedSampler(Sampler):
                     if (self.descending and score <= self.score_threshold) or \
                        (not self.descending and score >= self.score_threshold):
                         if self.greedy_exploration_ratio == 0.0:
-                            print(f"Score threshold reached: {score} < {self.score_threshold}")
+                            print(f"As the {i} the sample, score threshold reached: {score} < {self.score_threshold}")
                             break
                         elif random.random() < self.greedy_exploration_ratio:
                             continue

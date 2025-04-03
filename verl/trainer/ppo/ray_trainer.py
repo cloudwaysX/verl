@@ -647,8 +647,6 @@ class RayPPOTrainer(object):
         elif self.config.active_strategy.strategy_type == "fixordergreedy":
             assert self.config.active_strategy.greedy_top_percent == 0.0, \
                 "greedy_top_percent > 0 is not supported for greedy_fixedorder"
-            assert self.config.active_strategy.greedy_exploration_ratio == 0.0, \
-                "greedy_exploration_ratio > 0 is not supported for greedy_fixedorder"
             if self.config.active_strategy.selection_metric == "variance":
                 score_threshold = 0.0
             elif self.config.active_strategy.selection_metric == "clipratio_and_variance":
