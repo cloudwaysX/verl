@@ -11,6 +11,7 @@ class ScoreOrderedSampler(Sampler):
                  selection_fn,
                  base_sampler,
                  score_threshold=None,
+                 greedy_exploration_ratio=0.0,
                  descending=True):
         """
         A sampler that yields indices ordered by score after the first iteration.
@@ -28,8 +29,14 @@ class ScoreOrderedSampler(Sampler):
         self.score_threshold = score_threshold
         self.descending = descending
         self.base_sampler = base_sampler
+        self.greedy_exploration_ratio = greedy_exploration_ratio
         self._iter_count = 0
+        self.seed = 42
         
+        print(f"ScoreOrderedSampler: score_threshold={self.score_threshold}, "
+              f"greedy_exploration_ratio={self.greedy_exploration_ratio}, "
+              f"descending={self.descending}")
+
     def __iter__(self):
         if self._iter_count == 0:
             print("First iteration: using provided base sampler")
@@ -53,6 +60,8 @@ class ScoreOrderedSampler(Sampler):
             sorted_indices = [idx for idx, _ in sorted_indices_with_scores]
             sorted_scores = [score for _, score in sorted_indices_with_scores]
             
+            random.seed(self.seed + self._iter_count)
+            
             # Yield indices in sorted order until threshold is reached
             for i, idx in enumerate(sorted_indices):
                 # Check if we've crossed the score threshold
@@ -60,8 +69,10 @@ class ScoreOrderedSampler(Sampler):
                     score = sorted_scores[i]
                     if (self.descending and score < self.score_threshold) or \
                        (not self.descending and score > self.score_threshold):
-                        print(f"Terminating early: score {score} crossed threshold {self.score_threshold}")
-                        break
+                        if self.greedy_exploration_ratio == 0.0:
+                            break
+                        elif random.random() < self.greedy_exploration_ratio:
+                            continue
                 
                 yield idx
         

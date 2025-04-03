@@ -483,6 +483,8 @@ class RayPPOTrainer(object):
         self.latest_reward_mean = {} # Store the latest reward mean for each unique samples
         self.latest_clippedans_mean = {} # Store the latest clipped answer mean for each unique samples
         self.latest_edit2correct_counts = {} # Store the latest edit2correct counts for each unique samples
+        self.latest_edit2correct_mean = {} # Store the latest edit2correct mean for each unique samples
+        self.est_var_type12_error = {} # Store the estimated variance type 1 error for each unique samples
 
 
     def _validate_config(self):
@@ -630,6 +632,7 @@ class RayPPOTrainer(object):
                 raise ValueError(
                     f"Unsupported selection metric: {metric_type}"
                 )
+                
 
         if self.config.active_strategy.strategy_type == "greedy":
             base_batch_sampler = BatchSampler(base_sampler, batch_size=self.config.data.train_batch_size * 2, drop_last=True)
@@ -646,11 +649,20 @@ class RayPPOTrainer(object):
                 "greedy_top_percent > 0 is not supported for greedy_fixedorder"
             assert self.config.active_strategy.greedy_exploration_ratio == 0.0, \
                 "greedy_exploration_ratio > 0 is not supported for greedy_fixedorder"
+            if self.config.active_strategy.selection_metric == "variance":
+                score_threshold = 0.0
+            elif self.config.active_strategy.selection_metric == "clipratio_and_variance":
+                score_threshold = 0.5 #0.0*10 + 0.5
+            else:
+                score_threshold = None
+            
+
             self.sampler = ScoreOrderedSampler(
                 dataset_size=len(self.train_dataset),
                 selection_fn=selection_fn,
                 base_sampler=base_sampler,
-                score_threshold=None, # TODO
+                score_threshold=score_threshold,
+                greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio,
                 descending=True
             )
         else:
@@ -768,8 +780,8 @@ class RayPPOTrainer(object):
         # Get unique indices and their first occurrence indices.
         unique_ids, first_occurrence = np.unique(batch_indices, return_index=True)
         var_est_error, rewardmean_est_error = 0, 0
-        var_est_error_type1 = 0  # for type 1 error: if the gound trutch is 0 but predicted is not
-        var_est_error_type2 = 0 # for type 2 error: if the gound trutch is not 0 but predicted is 0
+        var_est_error_type2 = 0  # for type 12 error: if the gound trutch is 0 but predicted is not
+        var_est_error_type1 = 0 # for type 1 error: if the gound trutch is not 0 but predicted is 0
         total_var, total_rewardmean = 0, 0
         for unique_id, i in zip(unique_ids, first_occurrence):
             # track the variance of the rewards
@@ -777,8 +789,10 @@ class RayPPOTrainer(object):
             var_est_error += np.absolute(variance-self.prev_variances[unique_id])/len(unique_ids)
             if variance == 0 and self.prev_variances[unique_id] != 0:
                 var_est_error_type2 += 1
+                self.est_var_type12_error[unique_id][1]+=1
             elif variance != 0 and self.prev_variances[unique_id] == 0:
                 var_est_error_type1 += 1
+                self.est_var_type12_error[unique_id][0]+=1
             total_var += variance/len(unique_ids)
             self.prev_variances[unique_id] = variance
             # track the visit counts
@@ -1054,12 +1068,18 @@ class RayPPOTrainer(object):
             f'global_step_{self.global_steps}', 
             'latest_edit2correct_counts.pt'
         )
+        est_var_type12_error_path = os.path.join(
+            self.config.trainer.default_local_dir, 
+            f'global_step_{self.global_steps}', 
+            'est_var_type12_error.pt'
+        )
         
         torch.save(self.prev_variances, prev_variances_path)
         torch.save(self.visit_counts, visited_counts_path)
         torch.save(self.latest_reward_mean, latest_rewards_mean_path)
         torch.save(self.latest_clippedans_mean, latest_clippedans_mean_path)
         torch.save(self.latest_edit2correct_counts, latest_edit2correct_counts_path)
+        torch.save(self.est_var_type12_error, est_var_type12_error_path)
 
     def _load_checkpoint(self):
         if self.config.trainer.resume_mode == 'disable':
@@ -1119,6 +1139,7 @@ class RayPPOTrainer(object):
         latest_rewards_mean_path = os.path.join(global_step_folder, 'latest_rewards_mean.pt')
         latest_clippedans_mean_path = os.path.join(global_step_folder, 'latest_clippedans_mean.pt')
         latest_edit2correct_counts_path = os.path.join(global_step_folder, 'latest_edit2correct_counts.pt')
+        est_var_type12_error_path = os.path.join(global_step_folder, 'est_var_type12_error.pt')
 
         if os.path.exists(prev_variances_path):
             self.prev_variances = torch.load(prev_variances_path)
@@ -1140,6 +1161,10 @@ class RayPPOTrainer(object):
             self.latest_edit2correct_counts = torch.load(latest_edit2correct_counts_path)
         else:
             print("No latest_edit2correct_counts checkpoint found. Starting fresh.")
+        if os.path.exists(est_var_type12_error_path):
+            self.est_var_type12_error = torch.load(est_var_type12_error_path)
+        else:
+            print("No est_var_type12_error checkpoint found. Starting fresh.")
             
         return 1
 
@@ -1202,18 +1227,19 @@ class RayPPOTrainer(object):
         # Initialize the prev_variances, latest_reward_mean and latest_clippedans_mean 
         # if not loaded from checkpoint
         # set the variance, rewardmean and clippedansmean to largest so make sure each has been visited at least once
-        if not self.prev_variances:
-            for idx in self.train_dataset.get_all_prompt_ids():
+        for idx in self.train_dataset.get_all_prompt_ids():
+            if idx not in self.prev_variances:
                 self.prev_variances[idx] = 0.25
-        if not self.latest_reward_mean:
-            for idx in self.train_dataset.get_all_prompt_ids():
+            if idx not in self.latest_reward_mean:
                 self.latest_reward_mean[idx] = 1
-        if not self.latest_clippedans_mean:
-            for idx in self.train_dataset.get_all_prompt_ids():
+            if idx not in self.latest_clippedans_mean:
                 self.latest_clippedans_mean[idx] = 1
-        if not self.visit_counts:
-            for idx in self.train_dataset.get_all_prompt_ids():
+            if idx not in self.visit_counts:
                 self.visit_counts[idx] = 0
+            if idx not in self.latest_edit2correct_counts:
+                self.latest_edit2correct_counts[idx] = 1
+            if idx not in self.est_var_type12_error:
+                self.est_var_type12_error[idx] = [0,0]
 
         for epoch in range(self.config.trainer.total_epochs):
             self.tracked_texts = {}
@@ -1375,6 +1401,7 @@ class RayPPOTrainer(object):
                     prev_variances = np.array(list(self.prev_variances.values()))
                     latest_clippedans_mean = np.array(list(self.latest_clippedans_mean.values()))
                     latest_edit2correct_counts = np.array(list(self.latest_edit2correct_counts.values()))
+                    est_var_type2_error = np.array([item[1] for item in self.est_var_type12_error.values()])
                     metrics.update({"prompts/visit_counts_median": np.median(visit_counts),
                                 "prompts/visit_counts_max": np.max(visit_counts),
                                 "prompts/visit_counts_min": np.min(visit_counts),
@@ -1390,7 +1417,11 @@ class RayPPOTrainer(object):
                                 "prompts/latest_clippedans_mean_std": np.std(latest_clippedans_mean),
                                 "prompts/latest_edit2correct_count_mean": np.mean(latest_edit2correct_counts),
                                 "prompts/latest_edit2correct_count_std": np.std(latest_edit2correct_counts),
-                                "prompts/latest_edit2correct_count_median": np.median(latest_edit2correct_counts)})
+                                "prompts/latest_edit2correct_count_median": np.median(latest_edit2correct_counts),
+                                "prompts/latest_edit2correct_count_max": np.max(latest_edit2correct_counts),
+                                "prompts/est_var_type2_error_max": np.max(est_var_type2_error),
+                                "prompts/est_var_type2_error_median": np.median(est_var_type2_error),
+                                "prompts/est_var_type2_error_std": np.std(est_var_type2_error)})
                 logger.log(data=metrics, step=self.global_steps)
 
                 if self.global_steps >= self.total_training_steps:
