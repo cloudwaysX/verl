@@ -117,10 +117,10 @@ def main(config):
             output_text = tokenizer.batch_decode(output.batch['input_ids'][:, -config.rollout.response_length:],
                                                  skip_special_tokens=False)
             if "edit_input_ids" in output.batch:
-                edit_input_text = tokenizer.batch_decode(output.batch['edit_input_ids'][:, -config.rollout.response_length:],
+                edit_output_text = tokenizer.batch_decode(output.batch['edit_input_ids'][:, -config.rollout.response_length:],
                                                  skip_special_tokens=False)
             else:
-                edit_input_text = None
+                edit_output_text = None
 
             # remove the padding
             pad_token = tokenizer.pad_token
@@ -129,11 +129,11 @@ def main(config):
                 output_text_unpad.append(text.replace(pad_token, ''))
             output_lst[i].extend(output_text_unpad)
             
-            if edit_input_text is not None:
-                edit_input_text_unpad = []
-                for text in edit_input_text:
-                    edit_input_text_unpad.append(text.replace(pad_token, ''))
-                edit_input_lst[i].extend(edit_input_text_unpad)
+            if edit_output_text is not None:
+                edit_output_text_unpad = []
+                for text in edit_output_text:
+                    edit_output_text_unpad.append(text.replace(pad_token, ''))
+                edit_input_lst[i].extend(edit_output_text_unpad)
 
     # convert output_lst from (n_samples, n_data) to (n_data, n_sampels)
     output_lst = np.array(output_lst, dtype=object)
@@ -145,7 +145,7 @@ def main(config):
     # add to the data frame
     dataset[f'responses'] = output_lst
     if edit_input_lst is not None:
-        dataset[f'edit_inputs'] = edit_input_lst
+        dataset[f'edit_responses'] = edit_input_lst
 
     # write to a new parquet
     output_dir = os.path.dirname(config.data.output_path)
