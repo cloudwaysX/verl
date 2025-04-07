@@ -39,6 +39,8 @@ rollout:
   disable_log_stats: True
   enable_chunked_prefill: True
   n: 1
+  generation_mode: True
+  force_append_answers: False
 actor:
   strategy: fsdp  # This is for backward-compatibility
   ppo_mini_batch_size: 256

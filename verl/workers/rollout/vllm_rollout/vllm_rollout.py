@@ -442,6 +442,12 @@ class vLLMRollout(BaseRollout):
                 'edit_responses': edit_response,
                 'edit_attention_mask': edit_attention_mask,
             })
+            
+            if self.config.get("generation_mode", False):
+                edit_sequence = torch.cat([idx, edit_response], dim=-1)
+                batch.update({
+                    'edit_input_ids': edit_sequence,
+                })
 
         # free vllm cache engine
         if self.config.free_cache_engine:

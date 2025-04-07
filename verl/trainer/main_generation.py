@@ -51,6 +51,12 @@ def main(config):
 
     # read dataset. Note that the dataset should directly contain chat template format (e.g., a list of dictionary)
     dataset = pd.read_parquet(config.data.path)
+    if config.data.train_ratio<1:
+        size = int(len(dataset)*config.data.train_ratio)
+        if config.data.train_ratio_seed is not None:
+            np.random.seed(config.data.train_ratio_seed)
+            dataset = dataset.sample(frac=1, random_state=config.data.train_ratio_seed).reset_index(drop=True)
+        dataset = dataset.head(size)
     chat_lst = dataset[config.data.prompt_key].tolist()
 
     chat_lst = [chat.tolist() for chat in chat_lst]
@@ -70,6 +76,7 @@ def main(config):
     dp_size = wg.world_size // config.rollout.tensor_model_parallel_size
     num_batch = (total_samples // config_batch_size) + 1
     output_lst = [[] for _ in range(config.data.n_samples)]
+    edit_input_lst = [[] for _ in range(config.data.n_samples)]
 
     for batch_idx in range(num_batch):
         print(f'[{batch_idx+1}/{num_batch}] Start to process.')
@@ -109,21 +116,36 @@ def main(config):
             output = output[:real_batch_size]
             output_text = tokenizer.batch_decode(output.batch['input_ids'][:, -config.rollout.response_length:],
                                                  skip_special_tokens=False)
+            if "edit_input_ids" in output.batch:
+                edit_input_text = tokenizer.batch_decode(output.batch['edit_input_ids'][:, -config.rollout.response_length:],
+                                                 skip_special_tokens=False)
+            else:
+                edit_input_text = None
 
             # remove the padding
             pad_token = tokenizer.pad_token
             output_text_unpad = []
             for text in output_text:
                 output_text_unpad.append(text.replace(pad_token, ''))
-
             output_lst[i].extend(output_text_unpad)
+            
+            if edit_input_text is not None:
+                edit_input_text_unpad = []
+                for text in edit_input_text:
+                    edit_input_text_unpad.append(text.replace(pad_token, ''))
+                edit_input_lst[i].extend(edit_input_text_unpad)
 
     # convert output_lst from (n_samples, n_data) to (n_data, n_sampels)
     output_lst = np.array(output_lst, dtype=object)
     output_lst = np.transpose(output_lst, axes=(1, 0)).tolist()
+    if edit_input_lst is not None:
+        edit_input_lst = np.array(edit_input_lst, dtype=object)
+        edit_input_lst = np.transpose(edit_input_lst, axes=(1, 0)).tolist()
 
     # add to the data frame
     dataset[f'responses'] = output_lst
+    if edit_input_lst is not None:
+        dataset[f'edit_inputs'] = edit_input_lst
 
     # write to a new parquet
     output_dir = os.path.dirname(config.data.output_path)
