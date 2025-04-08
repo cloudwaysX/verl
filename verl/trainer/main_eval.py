@@ -80,8 +80,8 @@ def main(config):
             if score < 1 and edit_response_lst is not None:
                 edit_response = edit_response_lst[i]
                 edit_score = reward_fn(edit_response, ground_truth)
-                if edit_score*0.5 > score:
-                    score = edit_score*0.5
+                if edit_score > score:
+                    score = edit_score
             edit_score_lst.append(score)
  
 
@@ -142,16 +142,17 @@ def main(config):
         # Compute correlations
         if len(valid_df) > 1:
             print("\nCorrelations with difficulty:")
-            for score_column in ['max_score', 'max_edit_score', 'mean_score', 'mean_edit_score', 'pass', 'edit_pass']:
+            for score_column in ['mean_score', 'mean_edit_score', 'pass', 'edit_pass']:
                 correlation = valid_df['difficulty'].corr(valid_df[score_column])
                 print(f'Correlation between difficulty and {score_column}: {correlation:.4f}')
         else:
             print("Not enough valid difficulty values to calculate correlation")
             
         # Optional: Save results
-        if config.get("save_results", False):
-            results_df.to_csv('difficulty_scores_analysis.csv', index=False)
-            print(f'Results saved to difficulty_scores_analysis.csv')
+        if config.get("output_dir", None):
+            outfile = os.join(config.output_dir, "analysis.csv")
+            results_df.to_csv(outfile, index=False)
+            print(f'Results saved to {outfile}')
 
 
 if __name__ == '__main__':
