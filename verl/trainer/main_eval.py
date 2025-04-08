@@ -24,14 +24,14 @@ import pandas as pd
 import numpy as np
 
 
-def select_reward_fn(data_source):
+def select_reward_fn(data_source, usedeepscaler=False):
     if data_source == 'lighteval/MATH':
         return math.compute_score
-    elif datasource="DEEPSCALER":
+    elif data_source == "DEEPSCALER" or usedeepscaler:
         # To align with the compute score function, we need to wrap the reward function
         def customized_compute_score(solution_str, ground_truth, extra_info=None):
             from deepscaler.rewards.math_reward import deepscaler_reward_fn
-            res = deepscaler_reward_fn(solution_str, ground_truth)
+            res = deepscaler_reward_fn("<think>"+solution_str, ground_truth)
             
             if isinstance(res, (int, float, bool)):
                 return float(res)
@@ -70,7 +70,7 @@ def main(config):
         # select reward score based on data_source
         prompt = prompts[i]
         reward_data = reward_model_data[i]
-        reward_fn = select_reward_fn(data_source)
+        reward_fn = select_reward_fn(data_source, usedeepscaler=True)
         ground_truth = reward_data['ground_truth']
         score_lst = []
         edit_score_lst = []
@@ -96,24 +96,66 @@ def main(config):
         mean_scores.append(mean_score)
         mean_edit_scores.append(mean_edit_score)
 
-    print(f'pass@{num_response}: {sum(passes) / total}')
-    print(f'edit_pass@{num_response}): {sum(edit_passes) / total}')
-    print(f'mean_score: {sum(mean_scores) / total}')
-    print(f'mean_edit_score: {sum(mean_edit_scores) / total}')
-    
+
     # Compute the correlation with difficulty
     if config.data.get("difficulty_key",None):
-        difficulty = dataset["extra_info"][config.data.difficulty_key].tolist()
-        # Can you complete this?
-        mean_correlation = np.corrcoef(difficulty, mean_scores)[0, 1]
-        print(f'correlation between difficulty and mean_score: {mean_correlation}')
-        mean_correlation = np.corrcoef(difficulty, mean_edit_scores)[0, 1]
-        print(f'correlation between difficulty and mean_edit_score: {mean_correlation}')
-        pass_correlation = np.corrcoef(difficulty, passes / total)[0, 1]
-        print(f'correlation between difficulty and pass: {pass_correlation}')
-        edit_pass_correlation = np.corrcoef(difficulty, edit_passes / total)[0, 1]
-        print(f'correlation between difficulty and edit_pass: {edit_pass_correlation}')
-        
+        difficulties = [item[config.data.difficulty_key] for item in dataset["extra_info"]]
+        results_df = pd.DataFrame({
+            'difficulty': difficulties,
+            'pass': passes,
+            'edit_pass': edit_passes,
+            'mean_score': mean_scores,
+            'mean_edit_score': mean_edit_scores
+        })
+
+        # Count None values in difficulty
+        none_count = results_df['difficulty'].isna().sum()
+        print(f'Number of None values in difficulty: {none_count}')
+
+        # Drop rows with None difficulty
+        valid_df = results_df.dropna(subset=['difficulty'])
+        print(f'Samples with valid difficulty: {len(valid_df)}/{total}')
+
+        # Compute correlations
+        if len(valid_df) > 1:
+            for score_column in ['pass', 'edit_pass', 'mean_score', 'mean_edit_score']:
+                correlation = valid_df['difficulty'].corr(valid_df[score_column])
+                print(f'Correlation between difficulty and {score_column}: {correlation:.4f}')
+        else:
+            print("Not enough valid difficulty values to calculate correlation")
+
+        # Optional: Save results
+        if config.get("save_results", False):
+        results_df = pd.DataFrame({
+            'difficulty': all_difficulties,
+            'max_score': max_scores_list,
+            'max_edit_score': max_edit_scores_list,
+            'mean_score': mean_scores_list,
+            'mean_edit_score': mean_edit_scores_list
+        })
+
+        # Count None values in difficulty
+        none_count = results_df['difficulty'].isna().sum()
+        print(f'Number of None values in difficulty: {none_count}')
+
+        # Drop rows with None difficulty
+        valid_df = results_df.dropna(subset=['difficulty'])
+        print(f'Samples with valid difficulty: {len(valid_df)}/{total}')
+
+        # Compute correlations
+        if len(valid_df) > 1:
+            for score_column in ['max_score', 'max_edit_score', 'mean_score', 'mean_edit_score']:
+                correlation = valid_df['difficulty'].corr(valid_df[score_column])
+                print(f'Correlation between difficulty and {score_column}: {correlation:.4f}')
+        else:
+            print("Not enough valid difficulty values to calculate correlation")
+
+        # Optional: Save results
+        if config.get("save_results", False):
+            results_df.to_csv('difficulty_scores_analysis.csv', index=False)
+            print(f'Results saved to difficulty_scores_analysis.csv')
+            results_df.to_csv('difficulty_scores_analysis.csv', index=False)
+            print(f'Results saved to difficulty_scores_analysis.csv')
 
 
 if __name__ == '__main__':
