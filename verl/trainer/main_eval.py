@@ -102,58 +102,54 @@ def main(config):
         difficulties = [item[config.data.difficulty_key] for item in dataset["extra_info"]]
         results_df = pd.DataFrame({
             'difficulty': difficulties,
-            'pass': passes,
-            'edit_pass': edit_passes,
             'mean_score': mean_scores,
-            'mean_edit_score': mean_edit_scores
+            'mean_edit_score': mean_edit_scores,
+            'pass': passes,
+            'edit_pass': edit_passes
         })
-
+        
         # Count None values in difficulty
         none_count = results_df['difficulty'].isna().sum()
         print(f'Number of None values in difficulty: {none_count}')
-
-        # Drop rows with None difficulty
+        
+        # Calculate metrics for all samples
+        print("\nOverall metrics:")
+        print(f'pass@{num_response}: {results_df["pass"].mean():.4f}')
+        print(f'edit_pass@{num_response}: {results_df["edit_pass"].mean():.4f}')
+        print(f'mean_score: {results_df["mean_score"].mean():.4f}')
+        print(f'mean_edit_score: {results_df["mean_edit_score"].mean():.4f}')
+        
+        # Calculate metrics for samples with None difficulty
+        if none_count > 0:
+            none_df = results_df[results_df['difficulty'].isna()]
+            print("\nMetrics for samples with None difficulty:")
+            print(f'pass@{num_response}: {none_df["pass"].mean():.4f}')
+            print(f'edit_pass@{num_response}: {none_df["edit_pass"].mean():.4f}')
+            print(f'mean_score: {none_df["mean_score"].mean():.4f}')
+            print(f'mean_edit_score: {none_df["mean_edit_score"].mean():.4f}')
+        
+        # Drop rows with None difficulty for correlation analysis
         valid_df = results_df.dropna(subset=['difficulty'])
-        print(f'Samples with valid difficulty: {len(valid_df)}/{total}')
-
+        print(f'\nSamples with valid difficulty: {len(valid_df)}/{total}')
+        
+        # Calculate metrics for samples with valid difficulty
+        print("\nMetrics for samples with valid difficulty:")
+        print(f'pass@{num_response}: {valid_df["pass"].mean():.4f}')
+        print(f'edit_pass@{num_response}: {valid_df["edit_pass"].mean():.4f}')
+        print(f'mean_score: {valid_df["mean_score"].mean():.4f}')
+        print(f'mean_edit_score: {valid_df["mean_edit_score"].mean():.4f}')
+        
         # Compute correlations
         if len(valid_df) > 1:
-            for score_column in ['pass', 'edit_pass', 'mean_score', 'mean_edit_score']:
+            print("\nCorrelations with difficulty:")
+            for score_column in ['max_score', 'max_edit_score', 'mean_score', 'mean_edit_score', 'pass', 'edit_pass']:
                 correlation = valid_df['difficulty'].corr(valid_df[score_column])
                 print(f'Correlation between difficulty and {score_column}: {correlation:.4f}')
         else:
             print("Not enough valid difficulty values to calculate correlation")
-
+            
         # Optional: Save results
         if config.get("save_results", False):
-        results_df = pd.DataFrame({
-            'difficulty': all_difficulties,
-            'max_score': max_scores_list,
-            'max_edit_score': max_edit_scores_list,
-            'mean_score': mean_scores_list,
-            'mean_edit_score': mean_edit_scores_list
-        })
-
-        # Count None values in difficulty
-        none_count = results_df['difficulty'].isna().sum()
-        print(f'Number of None values in difficulty: {none_count}')
-
-        # Drop rows with None difficulty
-        valid_df = results_df.dropna(subset=['difficulty'])
-        print(f'Samples with valid difficulty: {len(valid_df)}/{total}')
-
-        # Compute correlations
-        if len(valid_df) > 1:
-            for score_column in ['max_score', 'max_edit_score', 'mean_score', 'mean_edit_score']:
-                correlation = valid_df['difficulty'].corr(valid_df[score_column])
-                print(f'Correlation between difficulty and {score_column}: {correlation:.4f}')
-        else:
-            print("Not enough valid difficulty values to calculate correlation")
-
-        # Optional: Save results
-        if config.get("save_results", False):
-            results_df.to_csv('difficulty_scores_analysis.csv', index=False)
-            print(f'Results saved to difficulty_scores_analysis.csv')
             results_df.to_csv('difficulty_scores_analysis.csv', index=False)
             print(f'Results saved to difficulty_scores_analysis.csv')
 
