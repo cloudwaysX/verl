@@ -650,9 +650,15 @@ class RayPPOTrainer(object):
             if self.config.active_strategy.selection_metric == "variance":
                 score_threshold = 0.0
             elif self.config.active_strategy.selection_metric == "clipratio_and_variance":
-                score_threshold = 0.5 #0.0*10 + 0.5
+                score_threshold = 0.5 #0.0*10 + 0.5 
             else:
                 score_threshold = None
+            if self.config.active_strategy.get("size_threshold",None):
+                score_threshold = None # Override the score_threshold
+                size_threshold = self.config.active_strategy.size_threshold
+            else:
+                size_threshold = None
+                
             
 
             self.sampler = ScoreOrderedSampler(
@@ -660,6 +666,7 @@ class RayPPOTrainer(object):
                 selection_fn=selection_fn,
                 base_sampler=base_sampler,
                 score_threshold=score_threshold,
+                size_threshold=size_threshold,
                 greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio,
                 descending=True,
                 shuffled=self.config.active_strategy.get("shufflefixorder", False)

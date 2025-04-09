@@ -11,6 +11,7 @@ class ScoreOrderedSampler(Sampler):
                  selection_fn,
                  base_sampler,
                  score_threshold=None,
+                 size_threshold=None,
                  greedy_exploration_ratio=0.0,
                  descending=True,
                  shuffled=False):
@@ -28,6 +29,7 @@ class ScoreOrderedSampler(Sampler):
         self.dataset_size = dataset_size
         self.selection_fn = selection_fn
         self.score_threshold = score_threshold
+        self.size_threshold = size_threshold
         self.descending = descending
         self.base_sampler = base_sampler
         self.greedy_exploration_ratio = greedy_exploration_ratio
@@ -61,6 +63,8 @@ class ScoreOrderedSampler(Sampler):
         
         if self.score_threshold is None:
             # No threshold, include all indices
+            if self.size_threshold is not None:
+                sorted_indices = sorted_indices[:int(self.size_threshold*len(sorted_indices))]
             return sorted_indices
             
         # Find the split point (first index below threshold)
