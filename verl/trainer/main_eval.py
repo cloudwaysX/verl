@@ -230,7 +230,7 @@ def main(config):
             
         # Optional: Save results
         if config.get("output_dir", None):
-            outfile = os.path.join(config.output_dir, "analysis.csv")
+            outfile = os.path.join(config.output_dir, f"{effective_num_response}pass_analysis.csv")
             results_df.to_csv(outfile, index=False)
             print(f'Results saved to {outfile}')
     else:
