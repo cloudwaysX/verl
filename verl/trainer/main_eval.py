@@ -92,7 +92,7 @@ def main(config):
         data_source = data_sources[i]
         # select reward score based on data_source
         prompt = prompts[i]
-        reward_data = reward_model_data[i]out
+        reward_data = reward_model_data[i]
         reward_fn = select_reward_fn(data_source, usedeepscaler=True)
         ground_truth = reward_data['ground_truth']
         
@@ -158,14 +158,12 @@ def main(config):
             'pass': passes,
             'edit_pass': edit_passes,
             'score_variance': score_variances,
-            'all_score_variance': all_score_variances,  # Combined variance
             'clip_ratio': clip_ratios
         }
         
         # Add weighted edit metrics to results
         for weight in edit_weights:
             results_dict[f'mean_edit_score_{weight}'] = weighted_edit_scores[weight]
-            results_dict[f'edit_pass_{weight}'] = weighted_edit_passes[weight]
         
         results_df = pd.DataFrame(results_dict)
         
@@ -180,7 +178,6 @@ def main(config):
         print(f'mean_score: {results_df["mean_score"].mean():.4f}')
         print(f'mean_edit_score: {results_df["mean_edit_score"].mean():.4f}')
         print(f'mean_score_variance: {results_df["score_variance"].mean():.4f}')
-        print(f'mean_all_score_variance: {results_df["all_score_variance"].mean():.4f}')
         print(f'mean_clip_ratio: {results_df["clip_ratio"].mean():.4f}')
         
         # Print weighted edit metrics
@@ -210,7 +207,6 @@ def main(config):
         print(f'edit_pass@{effective_num_response}: {valid_df["edit_pass"].mean():.4f}')
         print(f'mean_score: {valid_df["mean_score"].mean():.4f}')
         print(f'mean_edit_score: {valid_df["mean_edit_score"].mean():.4f}')
-        print(f'mean_all_score_variance: {valid_df["all_score_variance"].mean():.4f}')
         
         # Print weighted edit metrics for valid difficulty
         for weight in edit_weights:
@@ -220,12 +216,11 @@ def main(config):
         if len(valid_df) > 1:
             print("\nCorrelations with difficulty:")
             score_columns = ['mean_score', 'mean_edit_score', 'pass', 'edit_pass', 
-                             'score_variance', 'all_score_variance', 'clip_ratio']
+                             'score_variance', 'clip_ratio']
             
             # Add weighted edit score columns
             for weight in edit_weights:
                 score_columns.append(f'mean_edit_score_{weight}')
-                score_columns.append(f'edit_pass_{weight}')
                 
             for score_column in score_columns:
                 correlation = valid_df['difficulty'].corr(valid_df[score_column])
@@ -246,7 +241,6 @@ def main(config):
         print(f'mean_score: {np.mean(mean_scores):.4f}')
         print(f'mean_edit_score: {np.mean(mean_edit_scores):.4f}')
         print(f'mean_score_variance: {np.mean(score_variances):.4f}')
-        print(f'mean_all_score_variance: {np.mean(all_score_variances):.4f}')
         print(f'mean_clip_ratio: {np.mean(clip_ratios):.4f}')
         
         # Print weighted edit metrics
