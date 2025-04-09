@@ -92,7 +92,7 @@ def main(config):
         data_source = data_sources[i]
         # select reward score based on data_source
         prompt = prompts[i]
-        reward_data = reward_model_data[i]
+        reward_data = reward_model_data[i]out
         reward_fn = select_reward_fn(data_source, usedeepscaler=True)
         ground_truth = reward_data['ground_truth']
         
@@ -111,7 +111,7 @@ def main(config):
             score = reward_fn(r, ground_truth)
             score_lst.append(score)
             
-            if edit_response_lst is not None:
+            if edit_response_lst is not None and score < 1:
                 edit_response = edit_response_lst[j]
                 edit_score = reward_fn(edit_response, ground_truth)
                 edit_score_lst.append(edit_score)
@@ -124,7 +124,7 @@ def main(config):
                 # If no edit, use the original score
                 edit_score_lst.append(score)
                 for weight in edit_weights:
-                    weighted_edit_score_lists[weight].append(score * weight)
+                    weighted_edit_score_lists[weight].append(score)
 
         # Calculate metrics
         max_score = np.max(score_lst)
@@ -144,14 +144,7 @@ def main(config):
         for weight in edit_weights:
             weighted_scores = weighted_edit_score_lists[weight]
             weighted_edit_scores[weight].append(np.mean(weighted_scores))
-            weighted_edit_passes[weight].append(int(np.max(weighted_scores) == 1))
         
-        # Calculate combined variance of original and all weighted scores
-        all_scores = score_lst.copy()
-        for weight in edit_weights:
-            all_scores.extend(weighted_edit_score_lists[weight])
-        all_score_variance = np.var(all_scores)
-        all_score_variances.append(all_score_variance)
 
     # Compute the correlation with difficulty
     if config.data.get("difficulty_key", None):
@@ -193,7 +186,6 @@ def main(config):
         # Print weighted edit metrics
         for weight in edit_weights:
             print(f'mean_edit_score_{weight}: {results_df[f"mean_edit_score_{weight}"].mean():.4f}')
-            print(f'edit_pass_{weight}@{effective_num_response}: {results_df[f"edit_pass_{weight}"].mean():.4f}')
         
         # Calculate metrics for samples with None difficulty
         if none_count > 0:
@@ -207,7 +199,6 @@ def main(config):
             # Print weighted edit metrics for None difficulty
             for weight in edit_weights:
                 print(f'mean_edit_score_{weight}: {none_df[f"mean_edit_score_{weight}"].mean():.4f}')
-                print(f'edit_pass_{weight}@{effective_num_response}: {none_df[f"edit_pass_{weight}"].mean():.4f}')
         
         # Drop rows with None difficulty for correlation analysis
         valid_df = results_df.dropna(subset=['difficulty'])
@@ -224,7 +215,6 @@ def main(config):
         # Print weighted edit metrics for valid difficulty
         for weight in edit_weights:
             print(f'mean_edit_score_{weight}: {valid_df[f"mean_edit_score_{weight}"].mean():.4f}')
-            print(f'edit_pass_{weight}@{effective_num_response}: {valid_df[f"edit_pass_{weight}"].mean():.4f}')
         
         # Compute correlations
         if len(valid_df) > 1:
@@ -262,7 +252,6 @@ def main(config):
         # Print weighted edit metrics
         for weight in edit_weights:
             print(f'mean_edit_score_{weight}: {np.mean(weighted_edit_scores[weight]):.4f}')
-            print(f'edit_pass_{weight}@{effective_num_response}: {np.mean(weighted_edit_passes[weight]):.4f}')
 
 
 if __name__ == '__main__':
