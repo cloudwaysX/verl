@@ -70,8 +70,8 @@ class ScoreOrderedSampler(Sampler):
         # Find the split point (first index below threshold)
         split_idx = 0
         for i, score in enumerate(sorted_scores):
-            if (self.descending and score < self.score_threshold) or \
-               (not self.descending and score > self.score_threshold):
+            if (self.descending and score <= self.score_threshold) or \
+               (not self.descending and score >= self.score_threshold):
                 split_idx = i
                 break
         else:
@@ -87,6 +87,7 @@ class ScoreOrderedSampler(Sampler):
         exploration_samples = random.sample(below_threshold, explore_count) if explore_count > 0 else []
         
         # Combine above-threshold and exploration samples
+        print(f"{len(included_indices)} samples above threshold.")
         included_indices = above_threshold + exploration_samples
         
         # Re-sort the included indices by score
