@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import Sampler, BatchSampler
 
 import torch
+from numpy import np
 from torch.utils.data import Sampler
 
 class ScoreOrderedSampler(Sampler):
@@ -14,7 +15,8 @@ class ScoreOrderedSampler(Sampler):
                  size_threshold=None,
                  greedy_exploration_ratio=0.0,
                  descending=True,
-                 shuffled=False):
+                 shuffled=False,
+                 dynamic_threshold=False):
         """
         A sampler that yields indices ordered by score after the first iteration.
         First iteration uses the provided base_sampler if available.
@@ -36,10 +38,23 @@ class ScoreOrderedSampler(Sampler):
         self._iter_count = -1
         self.seed = 42
         self.shuffled = shuffled
+        self.dynamic_threshold = dynamic_threshold
         
         print(f"ScoreOrderedSampler: score_threshold={self.score_threshold}, "
               f"greedy_exploration_ratio={self.greedy_exploration_ratio}, "
               f"descending={self.descending}")
+        
+    def _compute_threhold_dynamics(self):
+        avg_score = 0.0
+        for idx in range(self.dataset_size):
+            avg_score += self.selection_fn(idx)
+        avg_score /= self.dataset_size
+        score_gap = self.score_threshold[0] - self.score_threshold[1]
+        alpha = 5
+        eta = self.score_threshold[1]
+        new_lower_bound = np.max(self.score_threshold[1] - eta * np.tanh(alpha * avg_score), 0.0)
+        new_upper_bound = np.min(new_lower_bound + score_gap, 1.0)
+        self.score_threshold = (new_upper_bound, new_lower_bound)
         
     def _calculate_included_indices(self):
         """Calculate which indices will be included in the current iteration."""
@@ -61,26 +76,32 @@ class ScoreOrderedSampler(Sampler):
         sorted_indices = [idx for idx, _ in sorted_indices_with_scores]
         sorted_scores = [score for _, score in sorted_indices_with_scores]
         
-        if self.score_threshold is None:
+        if self.score_threshold[0]>=1.0 and self.score_threshold[1]<0.0:
             # No threshold, include all indices
             if self.size_threshold is not None:
                 sorted_indices = sorted_indices[:int(self.size_threshold*len(sorted_indices))]
             return sorted_indices
             
         # Find the split point (first index below threshold)
-        split_idx = 0
+        split_idx = [0, len(sorted_scores)]
+        upper_bound = self.score_threshold[0]
+        lower_bound = self.score_threshold[1]
         for i, score in enumerate(sorted_scores):
-            if (self.descending and score <= self.score_threshold) or \
-               (not self.descending and score >= self.score_threshold):
-                split_idx = i
-                break
+            if self.descending:
+                if score > upper_bound:
+                    split_idx[0] = i+1
+                elif score <= lower_bound:
+                    split_idx[1] = i
+                    break
+            else:
+                raise NotImplementedError("Ascending order not implemented yet.")
         else:
             # No indices below threshold
             return sorted_indices
         
         # Split into above and below threshold
-        above_threshold = sorted_indices[:split_idx]
-        below_threshold = sorted_indices[split_idx:]
+        above_threshold = sorted_indices[split_idx[0]:split_idx[1]]
+        below_threshold = sorted_indices[split_idx[1]:]
         
         # Randomly select a subset of below-threshold samples
         explore_count = int(len(below_threshold) * self.greedy_exploration_ratio)
@@ -98,6 +119,8 @@ class ScoreOrderedSampler(Sampler):
 
     def __iter__(self):
         self._iter_count += 1
+        if self.dynamic_threshold:
+            self._compute_threhold_dynamics()
         if self._iter_count == 0:
             print("First iteration: using provided base sampler")
             # For the first iteration, use the provided base sampler
@@ -130,7 +153,8 @@ class GreedyBatchSampler(Sampler):
                  base_batch_sampler, 
                  selection_fn, 
                  greedy_top_percent, 
-                 greedy_exploration_ratio):
+                 greedy_exploration_ratio,
+                 dynamic_schedule_fn=None):
         """
         Args:
             base_batch_sampler (BatchSampler): Yields batches of indices (expected size = base_batch_size*2).
@@ -143,11 +167,23 @@ class GreedyBatchSampler(Sampler):
         self.greedy_top_percent = greedy_top_percent
         self.greedy_exploration_ratio = greedy_exploration_ratio
         self._iter_count = -1
+        self._step_count = -1
+        # TODO add threshold dynamics
+        self.dynamic_schedule_fn = dynamic_schedule_fn
+        
+    def _compute_geedy_top_percent_dynamics(self):
+        if self.dynamic_schedule_fn is None:
+            self.greedy_top_percent = self.dynamic_schedule_fn(
+                    self.greedy_top_percent,
+                    self._iter_count,
+                    self._step_count
+                )
         
 
     def __iter__(self):
         self._iter_count += 1
         for batch in self.base_batch_sampler:
+            self._step_count += 1
             half = len(batch) // 2  # we want to keep half of the indices
             if self._iter_count<=1:
                 print("Initial epochs, select 50%")

@@ -644,17 +644,19 @@ class RayPPOTrainer(object):
                 greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio
             )
             print("len of greedy_sampler", len(self.sampler))
-        elif self.config.active_strategy.strategy_type == "fixordergreedy":
+        elif self.config.active_strategy.strategy_type in ["fixordergreedy", "fixorderdynamic"]:
             assert self.config.active_strategy.greedy_top_percent == 0.0, \
                 "greedy_top_percent > 0 is not supported for greedy_fixedorder"
             if self.config.active_strategy.selection_metric == "variance":
-                score_threshold = 0.0
+                score_threshold = [1, 0.0] # <=upperbound, >lowerbound
             elif self.config.active_strategy.selection_metric == "clipratio_and_variance":
-                score_threshold = 0.5 #0.0*10 + 0.5 
+                score_threshold = [1, 0.5] # 0.0*10 + 0.5 
             else:
-                score_threshold = None
+                score_threshold = [1.0, -0.1]
+            assert score_threshold[0] > score_threshold[1], \
+                "score_threshold[0] must be greater than score_threshold[1]"
             if self.config.active_strategy.get("size_threshold",None):
-                score_threshold = None # Override the score_threshold
+                score_threshold = [1.0, -0.1] # Override the score_threshold
                 size_threshold = self.config.active_strategy.size_threshold
             else:
                 size_threshold = None
@@ -669,7 +671,8 @@ class RayPPOTrainer(object):
                 size_threshold=size_threshold,
                 greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio,
                 descending=True,
-                shuffled=self.config.active_strategy.get("shufflefixorder", False)
+                shuffled=self.config.active_strategy.get("shufflefixorder", False),
+                dynamic_threshold = True if self.config.active_strategy.strategy_type == "fixorderdynamic" else False
             )
         else:
             self.sampler = base_sampler
