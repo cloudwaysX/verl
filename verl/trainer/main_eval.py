@@ -230,7 +230,7 @@ def main(config):
             
         # Optional: Save results
         if config.get("output_dir", None):
-            outfile = os.path.join(config.output_dir, f"{effective_num_response}pass_analysis.csv")
+            outfile = os.path.join(config.output_dir, "analysis.csv")
             results_df.to_csv(outfile, index=False)
             print(f'Results saved to {outfile}')
     else:
@@ -246,6 +246,17 @@ def main(config):
         # Print weighted edit metrics
         for weight in edit_weights:
             print(f'mean_edit_score_{weight}: {np.mean(weighted_edit_scores[weight]):.4f}')
+            
+    # Other correlation analysis
+    # correlation between variance and mean score
+    print(f"Correlation between variance and mean score: {np.corrcoef(score_variances, mean_scores)[0,1]:.4f}")
+    # correlation between variance and mean edit score
+    print(f"Correlation between variance and mean edit score: {np.corrcoef(score_variances, mean_edit_scores)[0,1]:.4f}")
+    # correlation between variance and clip ratio
+    print(f"Correlation between variance and clip ratio: {np.corrcoef(score_variances, clip_ratios)[0,1]:.4f}")
+    
+    
+            
 
 
 if __name__ == '__main__':
