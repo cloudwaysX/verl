@@ -660,7 +660,8 @@ class RayPPOTrainer(object):
                 size_threshold = None
                 
             
-
+            assert not self.config.active_strategy.get("shufflefixorder", False), \
+                "We don't support shufflefixorder for fixordergreedy since it's performance is not good."
             self.sampler = ScoreOrderedSampler(
                 dataset_size=len(self.train_dataset),
                 selection_fn=selection_fn,
@@ -669,7 +670,6 @@ class RayPPOTrainer(object):
                 size_threshold=size_threshold,
                 greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio,
                 descending=True,
-                shuffled=self.config.active_strategy.get("shufflefixorder", False)
             )
         else:
             self.sampler = base_sampler
@@ -1262,61 +1262,6 @@ class RayPPOTrainer(object):
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
 
                 index = batch.non_tensor_batch['index']
-    
-                # Sort the indices by the selection metric (either variance or reward) in descending order
-                list_to_sort = None
-                variance_list = [(idx, self.prev_variances[idx]) for idx in index]
-                variance_list.sort(key=lambda x: x[1], reverse=True)
-                reward_list = [(idx, self.latest_reward_mean[idx]) for idx in index]
-                reward_list.sort(key=lambda x: x[1], reverse=True)
-                if self.config.active_strategy.selection_metric == "variance":
-                    list_to_sort = variance_list
-                elif self.config.active_strategy.selection_metric == "reward":
-                    list_to_sort = reward_list
-                elif self.config.active_strategy.selection_metric == "variance_and_clipratio":
-                    # I want the clip ratio to be dominating term
-                    list_to_sort = [(idx, self.prev_variances[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
-                    list_to_sort.sort(key=lambda x: x[1], reverse=True)
-                elif self.config.active_strategy.selection_metric == "highreward_and_clipratio_1":
-                    # I want the clip ratio to be dominating term
-                    list_to_sort = [(idx, self.latest_reward_mean[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
-                    list_to_sort.sort(key=lambda x: x[1], reverse=True)
-                elif self.config.active_strategy.selection_metric == "lowreward_and_clipratio_2":
-                    # I want the clip ratio to be dominating term
-                    list_to_sort = [(idx, -self.latest_reward_mean[idx]+self.latest_clippedans_mean[idx]*10) for idx in index]
-                    list_to_sort.sort(key=lambda x: x[1], reverse=True)
-                elif self.config.active_strategy.strategy_type == "greedy":
-                    raise ValueError(f"Unsupported selection metric: {self.config.active_strategy_selection_metric}")
-                
-                # Select the 50% indices starting from the top 50% indices
-                assert self.config.active_strategy.greedy_top_percent >= 0 and self.config.active_strategy.greedy_top_percent<= 0.5,f"greedy_top_percent must be between 0 and 0.5 but get {self.config.active_strategy.greedy_top_percent}"
-                start_po = int(self.config.active_strategy.greedy_top_percent*len(index))
-
-                # Select the top 50% indices
-                if self.config.active_strategy.strategy_type == "greedy":
-                    p = random.random()
-                    if not resume_from_ckpt and (epoch ==0 or epoch == 1):
-                        # Update the batch to keep only selected top 50% indices
-                        print("In the first 2 epochs, select the top 50% indices.")
-                        selected_indices = set(idx for idx, _ in list_to_sort[:len(list_to_sort)//2])
-                    elif p < self.config.active_strategy.greedy_exploration_ratio:
-                        print(f"With probability {self.config.active_strategy.greedy_exploration_ratio}, randomly select the 50%.")
-                        selected_indices = set(random.sample(list(index), len(index)//2))
-                    else:
-                        # Update the batch to keep only selected top 50% indices
-                        print(f"With probability {1-self.config.active_strategy.greedy_exploration_ratio}, select the top {self.config.active_strategy.greedy_top_percent*100}% - {self.config.active_strategy.greedy_top_percent*100 + 50}%.")
-                        selected_indices = set(idx for idx, _ in list_to_sort[start_po:start_po+len(list_to_sort)//2])
-                    selected_inbatch_idx = [i for i, idx in enumerate(index) if idx in selected_indices]
-                    batch.reorder(torch.tensor(selected_inbatch_idx))
-                    est_batch_selection_metric = np.mean([var for _, var in list_to_sort[:len(list_to_sort)//2]])
-                    if self.config.active_strategy.selection_metric == "variance":
-                        est_batch_var = est_batch_selection_metric
-                        print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated variance is {est_batch_var}")
-                    elif self.config.active_strategy.selection_metric == "reward":
-                        est_batch_reward = est_batch_selection_metric
-                        print(f"Generating for epoch {epoch} and batch {batch_idx} as the estimated reward is {est_batch_reward}")
-
-
 
                 # pop those keys for generation
                 if 'multi_modal_inputs' in batch.non_tensor_batch.keys():
