@@ -39,6 +39,7 @@ actor_rollout_ref:
     entropy_coeff: 0.001
     use_kl_loss: False # True for GRPO
     kl_loss_coef: 0.001 # for grpo
+    kl_loss_max: 0.1 # for enforce_ans to avoid nan kl
     kl_loss_type: low_var_kl # for grpo
     ppo_epochs: 1
     shuffle: False
@@ -96,6 +97,7 @@ actor_rollout_ref:
     do_sample: True
     # number of responses (i.e. num sample times)
     n: 1 # > 1 for grpo
+    force_append_answers: False
 
 critic:
   strategy: fsdp
@@ -153,6 +155,7 @@ reward_model:
   forward_max_token_len_per_gpu: ${critic.forward_max_token_len_per_gpu}
   reward_manager: naive
   customized_reward_fn_name: null
+  edit_weight: 0.4
 
 algorithm:
   gamma: 1.0

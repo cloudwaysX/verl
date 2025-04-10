@@ -42,8 +42,9 @@ from verl.trainer.ppo import core_algos
 from verl.utils.seqlen_balancing import get_seqlen_balanced_partitions, log_seqlen_unbalance
 from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path
 from verl.utils.dataset.rl_dataset import RLHFDataset, collate_fn
-from torch.utils.data import RandomSampler, SequentialSampler
+from torch.utils.data import RandomSampler, SequentialSampler, BatchSampler
 from torchdata.stateful_dataloader import StatefulDataLoader
+from verl.trainer.ppo.samplers import GreedyBatchSampler, ScoreOrderedSampler
 
 WorkerType = Type[Worker]
 
@@ -183,13 +184,14 @@ def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_re
                                                                         index=index,
                                                                         return_std=return_std)
         if return_std:
-            advantages, rewards_std, rewards_mean = \
-                advantages["advantages"], advantages["rewards_std"], advantages["rewards_mean"]
+            advantages, rewards_std, rewards_mean, edit2correct_counts = \
+                advantages["advantages"], advantages["rewards_std"], advantages["rewards_mean"], advantages["edit2correct_counts"]
         data.batch['advantages'] = advantages
         data.batch['returns'] = returns
         if return_std:
             data.batch['rewards_std'] = rewards_std
             data.batch['rewards_mean'] = rewards_mean
+            data.batch['edit2correct_counts'] = edit2correct_counts
     elif adv_estimator == AdvantageEstimator.REINFORCE_PLUS_PLUS:
         assert not return_std, 'return_std is not supported in REINFORCE_PLUS_PLUS'
         token_level_rewards = data.batch['token_level_rewards']
@@ -261,13 +263,14 @@ def _compute_response_info(batch):
 def compute_difficulty_metrics(batch):
     metrics = {}
     if 'difficulty' in batch.non_tensor_batch:
+        difficulty = [d for d in batch.non_tensor_batch["difficulty"] if d is not None] 
         metrics.update({
             'difficulty/mean':
-                np.mean(batch.non_tensor_batch['difficulty']),
+                np.mean(difficulty),
             'difficulty/max':
-                np.max(batch.non_tensor_batch['difficulty']),
+                np.max(difficulty),
             'difficulty/min':
-                np.min(batch.non_tensor_batch['difficulty']),
+                np.min(difficulty),
         })
     return metrics
 
@@ -365,7 +368,10 @@ def compute_data_metrics(batch, use_critic=True):
     }
     
     # record the clip per prompt
-    clip_persample = torch.eq(response_length, max_response_length).float()
+    clip_persample = torch.logical_or(
+            torch.eq(response_length, max_response_length).float(),
+            torch.gt(prompt_length, max_prompt_length).float()
+        )
     return metrics, clip_persample
 
 
@@ -476,6 +482,9 @@ class RayPPOTrainer(object):
         self.visit_counts = {} # Store the number of visits for each unique samples
         self.latest_reward_mean = {} # Store the latest reward mean for each unique samples
         self.latest_clippedans_mean = {} # Store the latest clipped answer mean for each unique samples
+        self.latest_edit2correct_counts = {} # Store the latest edit2correct counts for each unique samples
+        self.latest_edit2correct_mean = {} # Store the latest edit2correct mean for each unique samples
+        self.est_var_type12_error = {} # Store the estimated variance type 1 error for each unique samples
 
 
     def _validate_config(self):
@@ -580,22 +589,105 @@ class RayPPOTrainer(object):
         if self.config.data.shuffle:
             train_dataloader_generator = torch.Generator()
             train_dataloader_generator.manual_seed(self.config.data.get('seed', 1))
-            sampler = RandomSampler(data_source=self.train_dataset, generator=train_dataloader_generator)
+            base_sampler = RandomSampler(data_source=self.train_dataset, generator=train_dataloader_generator)
         else:
-            sampler = SequentialSampler(data_source=self.train_dataset)
+            base_sampler = SequentialSampler(data_source=self.train_dataset)
+            
 
+        # Define a helper to compute the selection metric.
+        self.rowindex2rawindex = self.train_dataset.get_all_prompt_ids_inorder()
+        def selection_fn(idx):
+            idx =  self.rowindex2rawindex[idx] #TODO
+            metric_type = self.config.active_strategy.selection_metric
+            if metric_type == "variance":
+                return self.prev_variances[idx]
+            elif metric_type == "reward":
+                return -self.latest_reward_mean[idx]
+            elif metric_type == "variance_and_clipratio":
+                return (
+                    self.prev_variances[idx]
+                    + self.latest_clippedans_mean[idx] * 10  
+                )
+            elif metric_type == "clipratio_and_variance":
+                return (
+                    self.prev_variances[idx]*10
+                    + self.latest_clippedans_mean[idx]
+                )
+            elif metric_type == "lowreward_and_variance":
+                return (
+                    self.prev_variances[idx] * 10
+                    - self.latest_reward_mean[idx]
+                )
+            elif metric_type == "highreward_and_clipratio_1":
+                return (
+                    self.latest_reward_mean[idx]
+                    + self.latest_clippedans_mean[idx] * 10
+                )
+            elif metric_type == "lowreward_and_clipratio_2":
+                return (
+                    -self.latest_reward_mean[idx]
+                    + self.latest_clippedans_mean[idx] * 10
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported selection metric: {metric_type}"
+                )
+                
 
-        if self.config.active_strategy.strategy_type=="greedy":
-            batch_size = self.config.data.train_batch_size * 2
-            # print(f"Ignoring the variance threshold when setting active strategy to greedy")
+        if self.config.active_strategy.strategy_type == "greedy":
+            base_batch_sampler = BatchSampler(base_sampler, batch_size=self.config.data.train_batch_size * 2, drop_last=True)
+            # Wrap the base batch sampler with the GreedyBatchSampler.
+            self.sampler = GreedyBatchSampler(
+                base_batch_sampler=base_batch_sampler,
+                selection_fn=selection_fn,
+                greedy_top_percent=self.config.active_strategy.greedy_top_percent,
+                greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio
+            )
+            print("len of greedy_sampler", len(self.sampler))
+        elif self.config.active_strategy.strategy_type == "fixordergreedy":
+            assert self.config.active_strategy.greedy_top_percent == 0.0, \
+                "greedy_top_percent > 0 is not supported for greedy_fixedorder"
+            if self.config.active_strategy.selection_metric == "variance":
+                score_threshold = 0.0
+            elif self.config.active_strategy.selection_metric == "clipratio_and_variance":
+                score_threshold = 0.5 #0.0*10 + 0.5 
+            else:
+                score_threshold = None
+            if self.config.active_strategy.get("size_threshold",None):
+                score_threshold = None # Override the score_threshold
+                size_threshold = self.config.active_strategy.size_threshold
+            else:
+                size_threshold = None
+                
+            
+
+            self.sampler = ScoreOrderedSampler(
+                dataset_size=len(self.train_dataset),
+                selection_fn=selection_fn,
+                base_sampler=base_sampler,
+                score_threshold=score_threshold,
+                size_threshold=size_threshold,
+                greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio,
+                descending=True,
+                shuffled=self.config.active_strategy.get("shufflefixorder", False)
+            )
         else:
-            batch_size = self.config.data.train_batch_size
-        self.train_dataloader = StatefulDataLoader(dataset=self.train_dataset,
-                                                   batch_size=batch_size,
-                                                   num_workers=8,
-                                                   drop_last=True,
-                                                   collate_fn=collate_fn,
-                                                   sampler=sampler)
+            self.sampler = base_sampler
+
+        batch_size = self.config.data.train_batch_size
+        if self.config.active_strategy.strategy_type == "greedy":
+            # For batch sampler, we don't need to pass in the batch_size.
+            self.train_dataloader = StatefulDataLoader(dataset=self.train_dataset,
+                                                num_workers=8,
+                                                collate_fn=collate_fn,
+                                                batch_sampler=self.sampler)
+        else:
+            self.train_dataloader = StatefulDataLoader(dataset=self.train_dataset,
+                                                batch_size=batch_size,
+                                                num_workers=8,
+                                                drop_last=True,
+                                                collate_fn=collate_fn,
+                                                sampler=self.sampler)
 
         self.val_dataset = RLHFDataset(parquet_files=self.config.data.val_files,
                                        tokenizer=self.tokenizer,
@@ -694,8 +786,8 @@ class RayPPOTrainer(object):
         # Get unique indices and their first occurrence indices.
         unique_ids, first_occurrence = np.unique(batch_indices, return_index=True)
         var_est_error, rewardmean_est_error = 0, 0
-        var_est_error_type1 = 0  # for type 1 error: if the gound trutch is 0 but predicted is not
-        var_est_error_type2 = 0 # for type 2 error: if the gound trutch is not 0 but predicted is 0
+        var_est_error_type2 = 0  # for type 12 error: if the gound trutch is 0 but predicted is not
+        var_est_error_type1 = 0 # for type 1 error: if the gound trutch is not 0 but predicted is 0
         total_var, total_rewardmean = 0, 0
         for unique_id, i in zip(unique_ids, first_occurrence):
             # track the variance of the rewards
@@ -703,8 +795,10 @@ class RayPPOTrainer(object):
             var_est_error += np.absolute(variance-self.prev_variances[unique_id])/len(unique_ids)
             if variance == 0 and self.prev_variances[unique_id] != 0:
                 var_est_error_type2 += 1
+                self.est_var_type12_error[unique_id][1]+=1
             elif variance != 0 and self.prev_variances[unique_id] == 0:
                 var_est_error_type1 += 1
+                self.est_var_type12_error[unique_id][0]+=1
             total_var += variance/len(unique_ids)
             self.prev_variances[unique_id] = variance
             # track the visit counts
@@ -712,6 +806,7 @@ class RayPPOTrainer(object):
             # track the reward mean
             rewardmean_est_error += np.absolute(batch.batch['rewards_mean'][i].item()-self.latest_reward_mean[unique_id])/len(unique_ids)
             self.latest_reward_mean[unique_id] = batch.batch['rewards_mean'][i].item()
+            self.latest_edit2correct_counts[unique_id] = batch.batch['edit2correct_counts'][i].item()
             total_rewardmean += np.absolute(self.latest_reward_mean[unique_id])/len(unique_ids)
          
         total_clipppedans_mean = 0
@@ -750,10 +845,10 @@ class RayPPOTrainer(object):
                 if raw_index in set(self.tracked_samples_idx):
                     current_reward = batch.batch['token_level_scores'][i].sum(dim=-1).item()
                     if "prompt" not in self.tracked_texts[raw_index]:
-                        self.tracked_texts[raw_index]["prompt"] = self.tokenizer.decode(batch.batch['input_ids'][i], skip_special_tokens=True)
+                        self.tracked_texts[raw_index]["prompt"] = self.tokenizer.decode(batch.batch['prompts'][i], skip_special_tokens=True)
                     if current_reward in self.tracked_texts[raw_index]:
                         continue
-                    output_id = batch.batch['responses'][i]
+                    output_id = batch.batch['responses'][i] if "edit_responses" not in batch.batch.keys() else batch.batch['edit_responses'][i]
                     output_text = self.tokenizer.decode(output_id, skip_special_tokens=True) 
                     self.tracked_texts[raw_index][current_reward] = output_text
                 
@@ -818,7 +913,7 @@ class RayPPOTrainer(object):
             print('validation generation end')
 
             # Store generated outputs
-            output_ids = test_output_gen_batch.batch['responses']
+            output_ids = test_output_gen_batch.batch['responses'] if 'edit_responses' not in test_output_gen_batch.batch.keys() else test_output_gen_batch.batch['edit_responses']
             output_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in output_ids]
             sample_outputs.extend(output_texts)
 
@@ -953,7 +1048,7 @@ class RayPPOTrainer(object):
         with open(local_latest_checkpointed_iteration, 'w') as f:
             f.write(str(self.global_steps))
 
-        # Save prev_variances to file
+        # Save various prompt related stats to file
         prev_variances_path = os.path.join(
             self.config.trainer.default_local_dir, 
             f'global_step_{self.global_steps}', 
@@ -974,11 +1069,23 @@ class RayPPOTrainer(object):
             f'global_step_{self.global_steps}', 
             'latest_clippedans_mean.pt'
         )
+        latest_edit2correct_counts_path = os.path.join(
+            self.config.trainer.default_local_dir, 
+            f'global_step_{self.global_steps}', 
+            'latest_edit2correct_counts.pt'
+        )
+        est_var_type12_error_path = os.path.join(
+            self.config.trainer.default_local_dir, 
+            f'global_step_{self.global_steps}', 
+            'est_var_type12_error.pt'
+        )
         
         torch.save(self.prev_variances, prev_variances_path)
         torch.save(self.visit_counts, visited_counts_path)
         torch.save(self.latest_reward_mean, latest_rewards_mean_path)
         torch.save(self.latest_clippedans_mean, latest_clippedans_mean_path)
+        torch.save(self.latest_edit2correct_counts, latest_edit2correct_counts_path)
+        torch.save(self.est_var_type12_error, est_var_type12_error_path)
 
     def _load_checkpoint(self):
         if self.config.trainer.resume_mode == 'disable':
@@ -1037,6 +1144,8 @@ class RayPPOTrainer(object):
         visited_counts_path = os.path.join(global_step_folder, 'visited_counts.pt')
         latest_rewards_mean_path = os.path.join(global_step_folder, 'latest_rewards_mean.pt')
         latest_clippedans_mean_path = os.path.join(global_step_folder, 'latest_clippedans_mean.pt')
+        latest_edit2correct_counts_path = os.path.join(global_step_folder, 'latest_edit2correct_counts.pt')
+        est_var_type12_error_path = os.path.join(global_step_folder, 'est_var_type12_error.pt')
 
         if os.path.exists(prev_variances_path):
             self.prev_variances = torch.load(prev_variances_path)
@@ -1054,6 +1163,14 @@ class RayPPOTrainer(object):
             self.latest_clippedans_mean = torch.load(latest_clippedans_mean_path)
         else:
             print("No latest_clippedans_mean checkpoint found. Starting fresh.")
+        if os.path.exists(latest_edit2correct_counts_path):
+            self.latest_edit2correct_counts = torch.load(latest_edit2correct_counts_path)
+        else:
+            print("No latest_edit2correct_counts checkpoint found. Starting fresh.")
+        if os.path.exists(est_var_type12_error_path):
+            self.est_var_type12_error = torch.load(est_var_type12_error_path)
+        else:
+            print("No est_var_type12_error checkpoint found. Starting fresh.")
             
         return 1
 
@@ -1092,6 +1209,8 @@ class RayPPOTrainer(object):
 
         # load checkpoint before doing anything
         resume_from_ckpt = self._load_checkpoint()
+        if resume_from_ckpt and self.config.active_strategy.greedy_top_percent > 0:
+            raise ValueError("Greedy topp >0 is not supported when resuming from checkpoint.")
 
         # perform validation before training
         # currently, we only support validation using the reward_function.
@@ -1114,18 +1233,19 @@ class RayPPOTrainer(object):
         # Initialize the prev_variances, latest_reward_mean and latest_clippedans_mean 
         # if not loaded from checkpoint
         # set the variance, rewardmean and clippedansmean to largest so make sure each has been visited at least once
-        if not self.prev_variances:
-            for idx in self.train_dataset.get_all_prompt_ids():
+        for idx in self.train_dataset.get_all_prompt_ids():
+            if idx not in self.prev_variances:
                 self.prev_variances[idx] = 0.25
-        if not self.latest_reward_mean:
-            for idx in self.train_dataset.get_all_prompt_ids():
+            if idx not in self.latest_reward_mean:
                 self.latest_reward_mean[idx] = 1
-        if not self.latest_clippedans_mean:
-            for idx in self.train_dataset.get_all_prompt_ids():
+            if idx not in self.latest_clippedans_mean:
                 self.latest_clippedans_mean[idx] = 1
-        if not self.visit_counts:
-            for idx in self.train_dataset.get_all_prompt_ids():
+            if idx not in self.visit_counts:
                 self.visit_counts[idx] = 0
+            if idx not in self.latest_edit2correct_counts:
+                self.latest_edit2correct_counts[idx] = 1
+            if idx not in self.est_var_type12_error:
+                self.est_var_type12_error[idx] = [0,0]
 
         for epoch in range(self.config.trainer.total_epochs):
             self.tracked_texts = {}
@@ -1211,109 +1331,109 @@ class RayPPOTrainer(object):
                     )
 
                 with _timer('step', timing_raw):
-                    # generate a batch
-                    with _timer('gen', timing_raw):
-                        gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
-            
+                    with _timer('train_step', timing_raw):
+                        # generate a batch
+                        with _timer('gen', timing_raw):
+                            gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
 
-                    if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
-                        with _timer('gen_max', timing_raw):
-                            gen_baseline_batch = deepcopy(gen_batch)
-                            gen_baseline_batch.meta_info['do_sample'] = False
-                            gen_baseline_output = self.actor_rollout_wg.generate_sequences(gen_baseline_batch)
+                        if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
+                            with _timer('gen_max', timing_raw):
+                                gen_baseline_batch = deepcopy(gen_batch)
+                                gen_baseline_batch.meta_info['do_sample'] = False
+                                gen_baseline_output = self.actor_rollout_wg.generate_sequences(gen_baseline_batch)
 
-                            batch = batch.union(gen_baseline_output)
-                            reward_baseline_tensor = self.reward_fn(batch)
-                            reward_baseline_tensor = reward_baseline_tensor.sum(dim=-1)
+                                batch = batch.union(gen_baseline_output)
+                                reward_baseline_tensor = self.reward_fn(batch)
+                                reward_baseline_tensor = reward_baseline_tensor.sum(dim=-1)
 
-                            batch.pop(batch_keys=list(gen_baseline_output.batch.keys()))
+                                batch.pop(batch_keys=list(gen_baseline_output.batch.keys()))
 
-                            batch.batch['reward_baselines'] = reward_baseline_tensor
+                                batch.batch['reward_baselines'] = reward_baseline_tensor
 
-                            del gen_baseline_batch, gen_baseline_output
-
-
-
-                    batch.non_tensor_batch['uid'] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))],
-                                                             dtype=object)
-                    
-                    # repeat to align with repeated responses in rollout
-                    batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
-                    batch = batch.union(gen_batch_output)
-
-                    # balance the number of valid tokens on each dp rank.
-                    # Note that this breaks the order of data inside the batch.
-                    # Please take care when you implement group based adv computation such as GRPO and rloo
-                    self._balance_batch(batch, metrics=metrics)
-
-                    # compute global_valid tokens
-                    batch.meta_info['global_token_num'] = torch.sum(batch.batch['attention_mask'], dim=-1).tolist()
-
-                    # recompute old_log_probs
-                    with _timer('old_log_prob', timing_raw):
-                        old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
-                        batch = batch.union(old_log_prob)
-
-                    if self.use_reference_policy:
-                        # compute reference log_prob
-                        with _timer('ref', timing_raw):
-                            ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
-                            batch = batch.union(ref_log_prob)
-
-                    # compute values
-                    if self.use_critic:
-                        with _timer('values', timing_raw):
-                            values = self.critic_wg.compute_values(batch)
-                            batch = batch.union(values)
-
-                    with _timer('adv', timing_raw):
-                        # compute scores. Support both model and function-based.
-                        # We first compute the scores using reward model. Then, we call reward_fn to combine
-                        # the results from reward model and rule-based results.
-                        if self.use_rm:
-                            # we first compute reward model score
-                            reward_tensor = self.rm_wg.compute_rm_score(batch)
-                            batch = batch.union(reward_tensor)
-
-                        # we combine with rule-based rm
-                        reward_tensor = self.reward_fn(batch)
-                        batch.batch['token_level_scores'] = reward_tensor
+                                del gen_baseline_batch, gen_baseline_output
 
 
 
-                        # compute rewards. apply_kl_penalty if available
-                        if not self.config.actor_rollout_ref.actor.get('use_kl_loss', False):
-                            batch, kl_metrics = apply_kl_penalty(batch,
-                                                                 kl_ctrl=self.kl_ctrl,
-                                                                 kl_penalty=self.config.algorithm.kl_penalty)
-                            metrics.update(kl_metrics)
-                        else:
-                            batch.batch['token_level_rewards'] = batch.batch['token_level_scores']
-
-
-                        # compute advantages, executed on the driver process
-                        batch = compute_advantage(batch,
-                                                  adv_estimator=self.config.algorithm.adv_estimator,
-                                                  gamma=self.config.algorithm.gamma,
-                                                  lam=self.config.algorithm.lam,
-                                                  num_repeat=self.config.actor_rollout_ref.rollout.n,
-                                                  return_std=self.return_rewards_std)
+                        batch.non_tensor_batch['uid'] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))],
+                                                                dtype=object)
                         
+                        # repeat to align with repeated responses in rollout
+                        batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
+                        batch = batch.union(gen_batch_output)
 
-                    # update critic
-                    if self.use_critic:
-                        with _timer('update_critic', timing_raw):
-                            critic_output = self.critic_wg.update_critic(batch)
-                        critic_output_metrics = reduce_metrics(critic_output.meta_info['metrics'])
-                        metrics.update(critic_output_metrics)
+                        # balance the number of valid tokens on each dp rank.
+                        # Note that this breaks the order of data inside the batch.
+                        # Please take care when you implement group based adv computation such as GRPO and rloo
+                        self._balance_batch(batch, metrics=metrics)
 
-                    # implement critic warmup
-                    if self.config.trainer.critic_warmup <= self.global_steps:
-                        # update actor
-                        with _timer('update_actor', timing_raw):
-                            actor_output = self.actor_rollout_wg.update_actor(batch)
-                        actor_output_metrics = reduce_metrics(actor_output.meta_info['metrics'])
-                        metrics.update(actor_output_metrics)
+                        # compute global_valid tokens
+                        batch.meta_info['global_token_num'] = torch.sum(batch.batch['attention_mask'], dim=-1).tolist()
+
+                        # recompute old_log_probs
+                        with _timer('old_log_prob', timing_raw):
+                            old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
+                            batch = batch.union(old_log_prob)
+
+                        if self.use_reference_policy:
+                            # compute reference log_prob
+                            with _timer('ref', timing_raw):
+                                ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
+                                batch = batch.union(ref_log_prob)
+
+                        # compute values
+                        if self.use_critic:
+                            with _timer('values', timing_raw):
+                                values = self.critic_wg.compute_values(batch)
+                                batch = batch.union(values)
+
+                        with _timer('adv', timing_raw):
+                            # compute scores. Support both model and function-based.
+                            # We first compute the scores using reward model. Then, we call reward_fn to combine
+                            # the results from reward model and rule-based results.
+                            if self.use_rm:
+                                # we first compute reward model score
+                                reward_tensor = self.rm_wg.compute_rm_score(batch)
+                                batch = batch.union(reward_tensor)
+
+                            # we combine with rule-based rm
+                            reward_tensor = self.reward_fn(batch)
+                            batch.batch['token_level_scores'] = reward_tensor
+
+
+
+                            # compute rewards. apply_kl_penalty if available
+                            if not self.config.actor_rollout_ref.actor.get('use_kl_loss', False):
+                                batch, kl_metrics = apply_kl_penalty(batch,
+                                                                    kl_ctrl=self.kl_ctrl,
+                                                                    kl_penalty=self.config.algorithm.kl_penalty)
+                                metrics.update(kl_metrics)
+                            else:
+                                batch.batch['token_level_rewards'] = batch.batch['token_level_scores']
+
+
+                            # compute advantages, executed on the driver process
+                            batch = compute_advantage(batch,
+                                                    adv_estimator=self.config.algorithm.adv_estimator,
+                                                    gamma=self.config.algorithm.gamma,
+                                                    lam=self.config.algorithm.lam,
+                                                    num_repeat=self.config.actor_rollout_ref.rollout.n,
+                                                    return_std=self.return_rewards_std)
+                            
+
+                        # update critic
+                        if self.use_critic:
+                            with _timer('update_critic', timing_raw):
+                                critic_output = self.critic_wg.update_critic(batch)
+                            critic_output_metrics = reduce_metrics(critic_output.meta_info['metrics'])
+                            metrics.update(critic_output_metrics)
+
+                        # implement critic warmup
+                        if self.config.trainer.critic_warmup <= self.global_steps:
+                            # update actor
+                            with _timer('update_actor', timing_raw):
+                                actor_output = self.actor_rollout_wg.update_actor(batch)
+                            actor_output_metrics = reduce_metrics(actor_output.meta_info['metrics'])
+                            metrics.update(actor_output_metrics)
 
                     # validate
                     if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and \
@@ -1343,6 +1463,8 @@ class RayPPOTrainer(object):
                     latest_reward_mean = np.array(list(self.latest_reward_mean.values()))
                     prev_variances = np.array(list(self.prev_variances.values()))
                     latest_clippedans_mean = np.array(list(self.latest_clippedans_mean.values()))
+                    latest_edit2correct_counts = np.array(list(self.latest_edit2correct_counts.values()))
+                    est_var_type2_error = np.array([item[1] for item in self.est_var_type12_error.values()])
                     metrics.update({"prompts/visit_counts_median": np.median(visit_counts),
                                 "prompts/visit_counts_max": np.max(visit_counts),
                                 "prompts/visit_counts_min": np.min(visit_counts),
@@ -1355,7 +1477,15 @@ class RayPPOTrainer(object):
                                 "prompts/variance_median": np.median(prev_variances),
                                 "prompts/latest_clippedans_mean_median": np.median(latest_clippedans_mean),
                                 "prompts/latest_clippedans_mean_mean": np.mean(latest_clippedans_mean),
-                                "prompts/latest_clippedans_mean_std": np.std(latest_clippedans_mean)})
+                                "prompts/latest_clippedans_mean_std": np.std(latest_clippedans_mean),
+                                "prompts/latest_edit2correct_count_mean": np.mean(latest_edit2correct_counts),
+                                "prompts/latest_edit2correct_count_std": np.std(latest_edit2correct_counts),
+                                "prompts/latest_edit2correct_count_median": np.median(latest_edit2correct_counts),
+                                "prompts/latest_edit2correct_count_max": np.max(latest_edit2correct_counts),
+                                "prompts/est_var_type2_error_max": np.max(est_var_type2_error),
+                                "prompts/est_var_type2_error_median": np.median(est_var_type2_error),
+                                "prompts/est_var_type2_error_std": np.std(est_var_type2_error),
+                                "epoch_size": len(self.train_dataloader)})
                 logger.log(data=metrics, step=self.global_steps)
 
                 if self.global_steps >= self.total_training_steps:
