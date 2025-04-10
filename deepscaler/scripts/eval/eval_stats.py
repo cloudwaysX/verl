@@ -581,4 +581,53 @@ def main():
         print(f"  * Better predictor: {'Edit Score' if avg_edit_corr > avg_mean_corr else 'Mean Score'}")
         
         # Best base length for each predictor
-        edit_avg_by_base = length_results.groupby("base_length")["
+# Best base length for each predictor
+        edit_avg_by_base = length_results.groupby("base_length")["edit_score_pearson"].mean()
+        edit_best_base_length = edit_avg_by_base.idxmax()
+        
+        mean_avg_by_base = length_results.groupby("base_length")["mean_score_pearson"].mean()
+        mean_best_base_length = mean_avg_by_base.idxmax()
+        
+        print(f"- Best base length for prediction:")
+        print(f"  * Edit Score {weight}: {int(edit_best_base_length)/1000}k (avg r={edit_avg_by_base[edit_best_base_length]:.3f})")
+        print(f"  * Mean Score: {int(mean_best_base_length)/1000}k (avg r={mean_avg_by_base[mean_best_base_length]:.3f})")
+        
+        # Best pair for each predictor
+        edit_best_pair = length_results.loc[length_results["edit_score_pearson"].abs().idxmax()]
+        mean_best_pair = length_results.loc[length_results["mean_score_pearson"].abs().idxmax()]
+        
+        print(f"- Strongest length correlations:")
+        print(f"  * Edit Score {weight}: {int(edit_best_pair.base_length)/1000}k → {int(edit_best_pair.next_length)/1000}k "
+              f"at pass {int(edit_best_pair['pass'])} (r={edit_best_pair.edit_score_pearson:.3f})")
+        print(f"  * Mean Score: {int(mean_best_pair.base_length)/1000}k → {int(mean_best_pair.next_length)/1000}k "
+              f"at pass {int(mean_best_pair['pass'])} (r={mean_best_pair.mean_score_pearson:.3f})")
+    
+    # Additional insights for score range analysis
+    if length_detailed is not None:
+        # Find score ranges where edit score is most effective
+        range_analysis = length_detailed.copy()
+        range_analysis['score_range'] = pd.cut(range_analysis['edit_score'], 
+                                              bins=[0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0],
+                                              labels=['0.0-0.1', '0.1-0.3', '0.3-0.5', '0.5-0.7', '0.7-0.9', '0.9-1.0'])
+        
+        range_stats = range_analysis.groupby('score_range').agg({
+            'edit_error': 'mean',
+            'mean_error': 'mean'
+        }).reset_index()
+        
+        range_stats['improvement'] = range_stats['mean_error'] - range_stats['edit_error']
+        range_stats['percent_improvement'] = (range_stats['improvement'] / range_stats['mean_error']) * 100
+        
+        # Sort by percent improvement to find where edit score provides the most benefit
+        best_ranges = range_stats.sort_values('percent_improvement', ascending=False)
+        
+        print("\n- Score ranges where edit score provides the most improvement:")
+        for i, row in best_ranges.iterrows():
+            if row['improvement'] > 0:  # Only show ranges where edit score is better
+                print(f"  * Edit score range {row['score_range']}: {row['percent_improvement']:.1f}% improvement "
+                      f"(Edit error: {row['edit_error']:.3f}, Mean error: {row['mean_error']:.3f})")
+    
+    print("\nAnalysis complete. Results saved to:", output_dir)
+
+if __name__ == "__main__":
+    main()
