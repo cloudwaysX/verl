@@ -437,17 +437,34 @@ class vLLMRollout(BaseRollout):
                 dtype=attention_mask.dtype
             )
             edit_attention_mask = torch.cat([attention_mask, edit_attention_mask], dim=-1)
-
-            batch.update({
-                'edit_responses': edit_response,
-                'edit_attention_mask': edit_attention_mask,
-            })
             
-            if self.config.get("generation_mode", False):
-                edit_sequence = torch.cat([idx, edit_response], dim=-1)
+            edit_sequence = torch.cat([idx, edit_response], dim=-1)
+            # create edit response position IDs
+            edit_response_length = edit_response.size(1)
+            edit_delta_position_id = torch.arange(1, edit_response_length + 1, device=position_ids.device)
+            edit_delta_position_id = edit_delta_position_id.unsqueeze(0).repeat(batch_size, 1)
+            edit_response_position_ids = position_ids[:, -1:] + edit_delta_position_id
+            edit_position_ids = torch.cat([position_ids, edit_response_position_ids], dim=-1)
+            
+            
+            if force_append_answer == "edit":
                 batch.update({
+                    'edit_responses': edit_response,
+                    'edit_attention_mask': edit_attention_mask,
                     'edit_input_ids': edit_sequence,
+                    'edit_position_ids': edit_position_ids,
                 })
+            elif force_append_answer == "overwrite":
+                batch.update({
+                    'responses': edit_response,
+                    'attention_mask': edit_attention_mask,
+                    'input_ids': edit_sequence,
+                    'position_ids': edit_position_ids,
+                })
+            else:
+                raise ValueError(
+                    f'force_append_answer must be either "edit" or "overwrite", but got {force_append_answer}'
+                )
 
         # free vllm cache engine
         if self.config.free_cache_engine:
