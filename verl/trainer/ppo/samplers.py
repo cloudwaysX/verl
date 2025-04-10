@@ -87,7 +87,7 @@ class ScoreOrderedSampler(Sampler):
         exploration_samples = random.sample(below_threshold, explore_count) if explore_count > 0 else []
         
         # Combine above-threshold and exploration samples
-        print(f"{len(included_indices)} samples above threshold.")
+        print(f"{len(above_threshold)} samples above threshold.")
         included_indices = above_threshold + exploration_samples
         
         # Re-sort the included indices by score
