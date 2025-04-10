@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Script to analyze correlations between edit scores at different passes and lengths.
+Script to analyze correlations between scores at different passes and lengths.
 Tests whether:
 1. edit_score with weight 0.4 at pass k can predict performance at the next higher pass
-2. edit_score with weight 0.4 at length m can predict performance at the next higher length
+2. regular mean_score at pass k can predict performance at the next higher pass
+3. edit_score with weight 0.4 at length m can predict performance at the next higher length
+4. regular mean_score at length m can predict performance at the next higher length
 """
 
 import pandas as pd
@@ -67,12 +69,16 @@ def load_analysis_files(base_dir, pattern="**/pass*_analysis.csv"):
 
 def analyze_next_level_correlations(data_dict, weight=0.4):
     """
-    Analyze correlations between edit_score at one level and performance at the next level
+    Analyze correlations between different predictors at one level and performance at the next level
     for both passes and lengths.
+    
+    Compare:
+    1. edit_score_weight as predictor
+    2. mean_score as predictor
     """
     # Define the sequence of passes and lengths
     pass_sequence = [1, 2, 4, 6, 8]
-    length_sequence = [2000, 4000, 8000]
+    length_sequence = [2000, 4000]
     
     # Results storage
     pass_results = []
@@ -90,7 +96,8 @@ def analyze_next_level_correlations(data_dict, weight=0.4):
             base_df = data_dict[length][base_pass]
             next_df = data_dict[length][next_pass]
             
-            if f"mean_edit_score_{weight}" not in base_df.columns:
+            # Check if required columns exist
+            if f"mean_edit_score_{weight}" not in base_df.columns or "mean_score" not in base_df.columns:
                 continue
                 
             # Take the minimum number of rows to ensure alignment
@@ -98,20 +105,28 @@ def analyze_next_level_correlations(data_dict, weight=0.4):
             if num_rows < 2:
                 continue
                 
-            base_scores = base_df[f"mean_edit_score_{weight}"]
+            # Get values for both predictors
+            edit_scores = base_df[f"mean_edit_score_{weight}"]
+            mean_scores = base_df["mean_score"] 
+            # Target values to predict
             next_scores = next_df["mean_score"]
             
-            # Calculate correlations
-            pearson, p_value = pearsonr(base_scores, next_scores)
+            # Calculate correlations for edit scores
+            edit_pearson, edit_p_value = pearsonr(edit_scores, next_scores)
             
+            # Calculate correlations for mean scores
+            mean_pearson, mean_p_value = pearsonr(mean_scores, next_scores)
                 
             pass_results.append({
                 "length": length,
                 "base_pass": base_pass,
                 "next_pass": next_pass,
                 "weight": weight,
-                "pearson_r": pearson,
-                "pearson_p": p_value,
+                "edit_score_pearson": edit_pearson,
+                "edit_score_p_value": edit_p_value,
+                "mean_score_pearson": mean_pearson,
+                "mean_score_p_value": mean_p_value,
+                "n_samples": num_rows
             })
     
     # Analyze next-level length correlations
@@ -127,7 +142,8 @@ def analyze_next_level_correlations(data_dict, weight=0.4):
             base_df = data_dict[base_length][pass_num]
             next_df = data_dict[next_length][pass_num]
             
-            if f"mean_edit_score_{weight}" not in base_df.columns:
+            # Check if required columns exist
+            if f"mean_edit_score_{weight}" not in base_df.columns or "mean_score" not in base_df.columns:
                 continue
                 
             # Take the minimum number of rows to ensure alignment
@@ -135,20 +151,27 @@ def analyze_next_level_correlations(data_dict, weight=0.4):
             if num_rows < 2:
                 continue
                 
-            base_scores = base_df[f"mean_edit_score_{weight}"]
+            # Get values for both predictors
+            edit_scores = base_df[f"mean_edit_score_{weight}"]
+            mean_scores = base_df["mean_score"]
+            # Target values to predict
             next_scores = next_df["mean_score"]
             
-            # Calculate correlations
-            pearson, p_value = pearsonr(base_scores, next_scores)
+            # Calculate correlations for edit scores
+            edit_pearson, edit_p_value = pearsonr(edit_scores, next_scores)
             
+            # Calculate correlations for mean scores
+            mean_pearson, mean_p_value = pearsonr(mean_scores, next_scores)
                 
             length_results.append({
                 "base_length": base_length,
                 "next_length": next_length,
                 "pass": pass_num,
                 "weight": weight,
-                "pearson_r": pearson,
-                "pearson_p": p_value,
+                "edit_score_pearson": edit_pearson,
+                "edit_score_p_value": edit_p_value,
+                "mean_score_pearson": mean_pearson,
+                "mean_score_p_value": mean_p_value,
                 "n_samples": num_rows
             })
     
@@ -161,32 +184,45 @@ def display_pass_correlations_table(df, weight):
         return
     
     # Create a view with only the columns we want to show
-    view_df = df[["base_pass", "next_pass", "length", "pearson_r", "pass_pearson_r", "n_samples"]].copy()
+    view_df = df[["base_pass", "next_pass", "length", "edit_score_pearson", "mean_score_pearson", "n_samples"]].copy()
     
     # Format the length column to show as "2k" instead of 2000
     view_df["length"] = view_df["length"].apply(lambda x: f"{int(x/1000)}k")
     
     # Format the correlation columns to show rounded values
-    view_df["pearson_r"] = view_df["pearson_r"].apply(lambda x: f"{x:.3f}")
-    view_df["pass_pearson_r"] = view_df["pass_pearson_r"].apply(lambda x: f"{x:.3f}")
+    view_df["edit_score_pearson"] = view_df["edit_score_pearson"].apply(lambda x: f"{x:.3f}")
+    view_df["mean_score_pearson"] = view_df["mean_score_pearson"].apply(lambda x: f"{x:.3f}")
     
     # Create table for all pass correlations
-    print(f"\nCorrelations between edit_score_{weight} at base pass and scores at next pass:")
-    print(tabulate(view_df, headers="keys", tablefmt="grid"))
+    print(f"\nCorrelations between predictors at base pass and scores at next pass:")
+    print(tabulate(view_df, headers=["Base Pass", "Next Pass", "Length", f"Edit Score {weight}", "Mean Score", "Samples"], 
+                  tablefmt="grid"))
+    
+    # Add column showing which predictor is better
+    df['better_predictor'] = df.apply(
+        lambda row: 'Edit Score' if abs(row['edit_score_pearson']) > abs(row['mean_score_pearson']) else 'Mean Score', 
+        axis=1
+    )
+    
+    # Count how many times each predictor is better
+    better_counts = df['better_predictor'].value_counts()
+    print("\nBetter predictor counts for pass prediction:")
+    for predictor, count in better_counts.items():
+        print(f"  {predictor}: {count} times")
     
     # Group by base_pass and next_pass and show average correlations
     grouped = df.groupby(["base_pass", "next_pass"]).agg({
-        "pearson_r": "mean",
-        "pass_pearson_r": "mean",
+        "edit_score_pearson": "mean",
+        "mean_score_pearson": "mean",
         "n_samples": "sum"
     }).reset_index()
     
     # Format the correlation columns
-    grouped["pearson_r"] = grouped["pearson_r"].apply(lambda x: f"{x:.3f}")
-    grouped["pass_pearson_r"] = grouped["pass_pearson_r"].apply(lambda x: f"{x:.3f}")
+    grouped["edit_score_pearson"] = grouped["edit_score_pearson"].apply(lambda x: f"{x:.3f}")
+    grouped["mean_score_pearson"] = grouped["mean_score_pearson"].apply(lambda x: f"{x:.3f}")
     
     print(f"\nAverage correlations by pass pair:")
-    print(tabulate(grouped, headers=["Base Pass", "Next Pass", "Avg Pearson r", "Avg Pass Pearson r", "Total Samples"], 
+    print(tabulate(grouped, headers=["Base Pass", "Next Pass", f"Avg Edit Score {weight}", "Avg Mean Score", "Total Samples"], 
                   tablefmt="grid"))
 
 def display_length_correlations_table(df, weight):
@@ -196,22 +232,37 @@ def display_length_correlations_table(df, weight):
         return
     
     # Create a view with only the columns we want to show
-    view_df = df[["base_length", "next_length", "pass", "pearson_r", "pass_pearson_r", "n_samples"]].copy()
+    view_df = df[["base_length", "next_length", "pass", "edit_score_pearson", "mean_score_pearson", "n_samples"]].copy()
     
     # Format the length columns to show as "2k" instead of 2000
     view_df["base_length"] = view_df["base_length"].apply(lambda x: f"{int(x/1000)}k")
     view_df["next_length"] = view_df["next_length"].apply(lambda x: f"{int(x/1000)}k")
     
     # Format the correlation columns to show rounded values
-    view_df["pearson_r"] = view_df["pearson_r"].apply(lambda x: f"{x:.3f}")
+    view_df["edit_score_pearson"] = view_df["edit_score_pearson"].apply(lambda x: f"{x:.3f}")
+    view_df["mean_score_pearson"] = view_df["mean_score_pearson"].apply(lambda x: f"{x:.3f}")
     
     # Create table for all length correlations
-    print(f"\nCorrelations between edit_score_{weight} at base length and scores at next length:")
-    print(tabulate(view_df, headers="keys", tablefmt="grid"))
+    print(f"\nCorrelations between predictors at base length and scores at next length:")
+    print(tabulate(view_df, headers=["Base Length", "Next Length", "Pass", f"Edit Score {weight}", "Mean Score", "Samples"], 
+                  tablefmt="grid"))
+    
+    # Add column showing which predictor is better
+    df['better_predictor'] = df.apply(
+        lambda row: 'Edit Score' if abs(row['edit_score_pearson']) > abs(row['mean_score_pearson']) else 'Mean Score', 
+        axis=1
+    )
+    
+    # Count how many times each predictor is better
+    better_counts = df['better_predictor'].value_counts()
+    print("\nBetter predictor counts for length prediction:")
+    for predictor, count in better_counts.items():
+        print(f"  {predictor}: {count} times")
     
     # Group by base_length and next_length and show average correlations
     grouped = df.groupby(["base_length", "next_length"]).agg({
-        "pearson_r": "mean",
+        "edit_score_pearson": "mean",
+        "mean_score_pearson": "mean",
         "n_samples": "sum"
     }).reset_index()
     
@@ -220,15 +271,16 @@ def display_length_correlations_table(df, weight):
     grouped["next_length"] = grouped["next_length"].apply(lambda x: f"{int(x/1000)}k")
     
     # Format the correlation columns
-    grouped["pearson_r"] = grouped["pearson_r"].apply(lambda x: f"{x:.3f}")
+    grouped["edit_score_pearson"] = grouped["edit_score_pearson"].apply(lambda x: f"{x:.3f}")
+    grouped["mean_score_pearson"] = grouped["mean_score_pearson"].apply(lambda x: f"{x:.3f}")
     
     print(f"\nAverage correlations by length pair:")
-    print(tabulate(grouped, headers=["Base Length", "Next Length", "Avg Pearson r", "Avg Pass Pearson r", "Total Samples"], 
+    print(tabulate(grouped, headers=["Base Length", "Next Length", f"Avg Edit Score {weight}", "Avg Mean Score", "Total Samples"], 
                   tablefmt="grid"))
 
 def main():
     # Configuration - modify these parameters as needed
-    base_dir = "path/to/analysis/files"  # Replace with your actual directory
+    base_dir = "/mnt/disk3/verl/eval/deepscaler_5k/"  # Replace with your actual directory
     output_dir = "correlation_results"
     weight = 0.4
     
@@ -246,12 +298,12 @@ def main():
         print(f"  Length {int(length)/1000}k: {len(passes)} pass configurations - {sorted(passes.keys())}")
     
     # Analyze correlations between one level and the next higher level
-    print(f"\nAnalyzing correlations with edit_score weight {weight}...")
+    print(f"\nAnalyzing correlations with different predictors (edit_score_{weight} vs mean_score)...")
     pass_results, length_results = analyze_next_level_correlations(data_dict, weight=weight)
     
     # Save results to CSV
     if pass_results is not None:
-        # pass_results.to_csv(os.path.join(output_dir, f"next_pass_correlations_weight{weight}.csv"), index=False)
+        pass_results.to_csv(os.path.join(output_dir, f"next_pass_correlations_comparison.csv"), index=False)
         print(f"Pass correlation results saved to CSV ({len(pass_results)} pairs analyzed)")
         # Display correlation tables
         display_pass_correlations_table(pass_results, weight)
@@ -259,7 +311,7 @@ def main():
         print("No valid pass correlation pairs found")
     
     if length_results is not None:
-        # length_results.to_csv(os.path.join(output_dir, f"next_length_correlations_weight{weight}.csv"), index=False)
+        length_results.to_csv(os.path.join(output_dir, f"next_length_correlations_comparison.csv"), index=False)
         print(f"Length correlation results saved to CSV ({len(length_results)} pairs analyzed)")
         # Display correlation tables
         display_length_correlations_table(length_results, weight)
@@ -270,22 +322,64 @@ def main():
     print("\nSummary of findings:")
     
     if pass_results is not None and not pass_results.empty:
-        avg_by_base = pass_results.groupby("base_pass")["pearson_r"].mean()
-        best_base_pass = avg_by_base.idxmax()
-        print(f"- Best base pass for prediction: pass {best_base_pass} (avg r={avg_by_base[best_base_pass]:.3f})")
+        # Overall averages for both predictors
+        avg_edit_corr = pass_results["edit_score_pearson"].mean()
+        avg_mean_corr = pass_results["mean_score_pearson"].mean()
+        print(f"- Average correlation for pass prediction:")
+        print(f"  * Edit Score {weight}: {avg_edit_corr:.3f}")
+        print(f"  * Mean Score: {avg_mean_corr:.3f}")
+        print(f"  * Better predictor: {'Edit Score' if avg_edit_corr > avg_mean_corr else 'Mean Score'}")
         
-        best_pair = pass_results.loc[pass_results["pearson_r"].idxmax()]
-        print(f"- Strongest pass correlation: pass {int(best_pair.base_pass)} → pass {int(best_pair.next_pass)} "
-              f"at length {int(best_pair.length)/1000}k (r={best_pair.pearson_r:.3f})")
+        # Best base pass for each predictor
+        edit_avg_by_base = pass_results.groupby("base_pass")["edit_score_pearson"].mean()
+        edit_best_base_pass = edit_avg_by_base.idxmax()
+        
+        mean_avg_by_base = pass_results.groupby("base_pass")["mean_score_pearson"].mean()
+        mean_best_base_pass = mean_avg_by_base.idxmax()
+        
+        print(f"- Best base pass for prediction:")
+        print(f"  * Edit Score {weight}: pass {edit_best_base_pass} (avg r={edit_avg_by_base[edit_best_base_pass]:.3f})")
+        print(f"  * Mean Score: pass {mean_best_base_pass} (avg r={mean_avg_by_base[mean_best_base_pass]:.3f})")
+        
+        # Best pair for each predictor
+        edit_best_pair = pass_results.loc[pass_results["edit_score_pearson"].abs().idxmax()]
+        mean_best_pair = pass_results.loc[pass_results["mean_score_pearson"].abs().idxmax()]
+        
+        print(f"- Strongest pass correlations:")
+        print(f"  * Edit Score {weight}: pass {int(edit_best_pair.base_pass)} → pass {int(edit_best_pair.next_pass)} "
+              f"at length {int(edit_best_pair.length)/1000}k (r={edit_best_pair.edit_score_pearson:.3f})")
+        print(f"  * Mean Score: pass {int(mean_best_pair.base_pass)} → pass {int(mean_best_pair.next_pass)} "
+              f"at length {int(mean_best_pair.length)/1000}k (r={mean_best_pair.mean_score_pearson:.3f})")
     
     if length_results is not None and not length_results.empty:
-        avg_by_base = length_results.groupby("base_length")["pearson_r"].mean()
-        best_base_length = avg_by_base.idxmax()
-        print(f"- Best base length for prediction: {int(best_base_length)/1000}k (avg r={avg_by_base[best_base_length]:.3f})")
+        # Overall averages for both predictors
+        avg_edit_corr = length_results["edit_score_pearson"].mean()
+        avg_mean_corr = length_results["mean_score_pearson"].mean()
+        print(f"\n- Average correlation for length prediction:")
+        print(f"  * Edit Score {weight}: {avg_edit_corr:.3f}")
+        print(f"  * Mean Score: {avg_mean_corr:.3f}")
+        print(f"  * Better predictor: {'Edit Score' if avg_edit_corr > avg_mean_corr else 'Mean Score'}")
         
-        best_pair = length_results.loc[length_results["pearson_r"].idxmax()]
-        print(f"- Strongest length correlation: {int(best_pair.base_length)/1000}k → {int(best_pair.next_length)/1000}k "
-              f"at pass {int(best_pair['pass'])} (r={best_pair.pearson_r:.3f})")
+        # Best base length for each predictor
+        edit_avg_by_base = length_results.groupby("base_length")["edit_score_pearson"].mean()
+        edit_best_base_length = edit_avg_by_base.idxmax()
+        
+        mean_avg_by_base = length_results.groupby("base_length")["mean_score_pearson"].mean()
+        mean_best_base_length = mean_avg_by_base.idxmax()
+        
+        print(f"- Best base length for prediction:")
+        print(f"  * Edit Score {weight}: {int(edit_best_base_length)/1000}k (avg r={edit_avg_by_base[edit_best_base_length]:.3f})")
+        print(f"  * Mean Score: {int(mean_best_base_length)/1000}k (avg r={mean_avg_by_base[mean_best_base_length]:.3f})")
+        
+        # Best pair for each predictor
+        edit_best_pair = length_results.loc[length_results["edit_score_pearson"].abs().idxmax()]
+        mean_best_pair = length_results.loc[length_results["mean_score_pearson"].abs().idxmax()]
+        
+        print(f"- Strongest length correlations:")
+        print(f"  * Edit Score {weight}: {int(edit_best_pair.base_length)/1000}k → {int(edit_best_pair.next_length)/1000}k "
+              f"at pass {int(edit_best_pair['pass'])} (r={edit_best_pair.edit_score_pearson:.3f})")
+        print(f"  * Mean Score: {int(mean_best_pair.base_length)/1000}k → {int(mean_best_pair.next_length)/1000}k "
+              f"at pass {int(mean_best_pair['pass'])} (r={mean_best_pair.mean_score_pearson:.3f})")
     
     print("\nAnalysis complete. Results saved to:", output_dir)
 
