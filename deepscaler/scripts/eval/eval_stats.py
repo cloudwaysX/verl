@@ -72,7 +72,7 @@ def analyze_next_level_correlations(data_dict, weight=0.4):
     """
     # Define the sequence of passes and lengths
     pass_sequence = [1, 2, 4, 6, 8]
-    length_sequence = [2000, 4000, 8000]
+    length_sequence = [2000, 4000]
     
     # Results storage
     pass_results = []
@@ -103,7 +103,6 @@ def analyze_next_level_correlations(data_dict, weight=0.4):
             
             # Calculate correlations
             pearson, p_value = pearsonr(base_scores, next_scores)
-            
                 
             pass_results.append({
                 "length": length,
@@ -112,6 +111,7 @@ def analyze_next_level_correlations(data_dict, weight=0.4):
                 "weight": weight,
                 "pearson_r": pearson,
                 "pearson_p": p_value,
+                "n_samples": num_rows
             })
     
     # Analyze next-level length correlations
@@ -161,14 +161,13 @@ def display_pass_correlations_table(df, weight):
         return
     
     # Create a view with only the columns we want to show
-    view_df = df[["base_pass", "next_pass", "length", "pearson_r", "pass_pearson_r", "n_samples"]].copy()
+    view_df = df[["base_pass", "next_pass", "length", "pearson_r", "n_samples"]].copy()
     
     # Format the length column to show as "2k" instead of 2000
     view_df["length"] = view_df["length"].apply(lambda x: f"{int(x/1000)}k")
     
     # Format the correlation columns to show rounded values
     view_df["pearson_r"] = view_df["pearson_r"].apply(lambda x: f"{x:.3f}")
-    view_df["pass_pearson_r"] = view_df["pass_pearson_r"].apply(lambda x: f"{x:.3f}")
     
     # Create table for all pass correlations
     print(f"\nCorrelations between edit_score_{weight} at base pass and scores at next pass:")
@@ -177,16 +176,14 @@ def display_pass_correlations_table(df, weight):
     # Group by base_pass and next_pass and show average correlations
     grouped = df.groupby(["base_pass", "next_pass"]).agg({
         "pearson_r": "mean",
-        "pass_pearson_r": "mean",
         "n_samples": "sum"
     }).reset_index()
     
     # Format the correlation columns
     grouped["pearson_r"] = grouped["pearson_r"].apply(lambda x: f"{x:.3f}")
-    grouped["pass_pearson_r"] = grouped["pass_pearson_r"].apply(lambda x: f"{x:.3f}")
     
     print(f"\nAverage correlations by pass pair:")
-    print(tabulate(grouped, headers=["Base Pass", "Next Pass", "Avg Pearson r", "Avg Pass Pearson r", "Total Samples"], 
+    print(tabulate(grouped, headers=["Base Pass", "Next Pass", "Avg Pearson r",  "Total Samples"], 
                   tablefmt="grid"))
 
 def display_length_correlations_table(df, weight):
@@ -196,7 +193,7 @@ def display_length_correlations_table(df, weight):
         return
     
     # Create a view with only the columns we want to show
-    view_df = df[["base_length", "next_length", "pass", "pearson_r", "pass_pearson_r", "n_samples"]].copy()
+    view_df = df[["base_length", "next_length", "pass", "pearson_r",  "n_samples"]].copy()
     
     # Format the length columns to show as "2k" instead of 2000
     view_df["base_length"] = view_df["base_length"].apply(lambda x: f"{int(x/1000)}k")
@@ -223,12 +220,12 @@ def display_length_correlations_table(df, weight):
     grouped["pearson_r"] = grouped["pearson_r"].apply(lambda x: f"{x:.3f}")
     
     print(f"\nAverage correlations by length pair:")
-    print(tabulate(grouped, headers=["Base Length", "Next Length", "Avg Pearson r", "Avg Pass Pearson r", "Total Samples"], 
+    print(tabulate(grouped, headers=["Base Length", "Next Length", "Avg Pearson r", "Total Samples"], 
                   tablefmt="grid"))
 
 def main():
     # Configuration - modify these parameters as needed
-    base_dir = "path/to/analysis/files"  # Replace with your actual directory
+    base_dir = "/mnt/disk3/verl/eval/deepscaler_5k/"  # Replace with your actual directory
     output_dir = "correlation_results"
     weight = 0.4
     
