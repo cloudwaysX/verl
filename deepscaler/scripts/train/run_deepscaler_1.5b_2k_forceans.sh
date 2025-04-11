@@ -9,13 +9,13 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 
-PROJECT_NAME='deepscaler_1k'
-EXPERIMENT_NAME='deepscaler-1.5b-2k_foceans_w20' 
+PROJECT_NAME='deepscaler_4k'
+EXPERIMENT_NAME='test_deepscaler-1.5b-2k_foceansoverwrite' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_ratio=0.025 \
+    data.train_ratio=0.1 \
     +data.train_ratio_seed=42 \
     data.train_files=$HOME/data/deepscaler/train.parquet \
     data.val_files=[$HOME/data/aime/test.parquet,$HOME/data/amc/test.parquet,$HOME/data/math/test.parquet,$HOME/data/minerva/test.parquet] \
@@ -33,6 +33,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
+    actor_rollout_ref.actor.clip_ratio=0.2 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     +actor_rollout_ref.actor.fsdp_config.grad_offload=False \
@@ -44,7 +45,8 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
     actor_rollout_ref.rollout.n=8 \
     +actor_rollout_ref.rollout.n_val=8 \
-    actor_rollout_ref.rollout.force_append_answers=True \
+    +actor_rollout_ref.rollout.use_edit_for_validation=True \
+    actor_rollout_ref.rollout.force_append_answers="overwrite" \
     actor_rollout_ref.rollout.max_num_batched_tokens=8192 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.kl_ctrl.kl_coef=0.001 \
@@ -61,6 +63,6 @@ python3 -m verl.trainer.main_ppo \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
     trainer.total_epochs=40 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
-    reward_model.edit_weight=0.2 \
+    reward_model.edit_weight=0.0 \
     active_strategy.selection_metric=null \
     active_strategy.strategy_type=null
