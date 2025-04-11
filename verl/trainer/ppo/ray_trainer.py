@@ -986,11 +986,12 @@ class RayPPOTrainer(object):
                 'recompute_log_prob': False,
                 'do_sample': False,
                 'validate': True,
+                'longer_response': True,
             }
 
             # pad to be divisible by dp_size
             test_gen_batch_padded, pad_size = pad_dataproto_to_divisor(test_gen_batch, self.actor_rollout_wg.world_size)
-            test_output_gen_batch_padded = self.actor_rollout_wg.generate_sequences_testlonger_response(test_gen_batch_padded)
+            test_output_gen_batch_padded = self.actor_rollout_wg.generate_sequences(test_gen_batch_padded)
             # unpad
             test_output_gen_batch = unpad_dataproto(test_output_gen_batch_padded, pad_size=pad_size)
             print('Test longer response validation generation end')

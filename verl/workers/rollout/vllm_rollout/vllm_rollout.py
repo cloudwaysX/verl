@@ -216,6 +216,9 @@ class vLLMRollout(BaseRollout):
                 'temperature': 0,
                 'n': 1  # if greedy, only 1 response
             }
+            
+        if prompts.meta_info.get('longer_response', False):
+            kwargs["max_tokens"] = self.config.response_length*2
 
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs):
@@ -271,8 +274,9 @@ class vLLMRollout(BaseRollout):
             batch_size=batch_size)
         
         # =========Second Generation Pass: Generate final answer using COT =========
-        # If validation, we always append the final answer to maximize the results.
-        if force_append_answer or prompts.meta_info.get('validate', False):
+        # If validation, we always append the final answer to maximize results.
+        if not prompts.meta_info.get('longer_response', False) and \
+           (force_append_answer or prompts.meta_info.get('validate', False)):
             # tokenize the final answer
             finalans_token = self.thought_delimiter_end + self.finalans_token
             # Convert the prompt+initial response to a list of list of token ids
@@ -355,95 +359,4 @@ class vLLMRollout(BaseRollout):
 
         return DataProto(batch=batch)
     
-    def generate_sequences_testlonger_response(self, prompts: DataProto,  **kwargs) -> DataProto:
-        
-        # rebuild vllm cache engine
-        if self.config.free_cache_engine:
-            self.inference_engine.init_cache_engine()
-
-        idx = prompts.batch['input_ids']  # (bs, prompt_length)
-        # left-padded attention_mask
-        attention_mask = prompts.batch['attention_mask']
-        position_ids = prompts.batch['position_ids']
-
-        # used to construct attention_mask
-        eos_token_id = prompts.meta_info['eos_token_id']
-
-        batch_size = idx.size(0)
-
-        idx_list = []
-        # parse idx from torch.Tensor to List[List[str]]
-        for i in range(batch_size):
-            idx_list.append(_pre_process_inputs(self.pad_token_id, idx[i]))
-
-        do_sample = prompts.meta_info.get('do_sample', True)
-        if not do_sample:
-            kwargs = {
-                'best_of': 1,
-                'top_p': 1.0,
-                'top_k': -1,
-                'min_p': 0.0,
-                'temperature': 0,
-                'n': 1  # if greedy, only 1 response
-            }
-            
-        kwargs["max_tokens"] = self.config.response_length*2
-
-        # users can customize different sampling_params at different run
-        with self.update_sampling_params(**kwargs):
-            output = self.inference_engine.generate(
-                prompts=None,  # because we have already convert it to prompt token id
-                sampling_params=self.sampling_params,
-                prompt_token_ids=idx_list,
-                use_tqdm=False)
-
-        # TODO(sgm): disable logprob when recompute_log_prob is enable
-        # if n = 1: (bs, response_length) ; if n > 1: (bs * n, response_length)
-        initial_response = output[0].to(idx.device)
-        if self.config.n > 1 and do_sample:
-            idx = idx.repeat_interleave(self.config.n, dim=0)
-            attention_mask = attention_mask.repeat_interleave(self.config.n, dim=0)
-            position_ids = position_ids.repeat_interleave(self.config.n, dim=0)
-            batch_size = batch_size * self.config.n
-        
-        # Make sure initial_response has correct length before calculating position IDs and attention masks
-        if initial_response.shape[1] < self.config.response_length:
-            initial_response = pad_sequence_to_length(
-                initial_response, 
-                self.config.response_length, 
-                self.pad_token_id
-            )
-        
-        # Create initial response attention mask and position IDs
-        response_length = initial_response.size(1)
-        delta_position_id = torch.arange(1, response_length + 1, device=position_ids.device)
-        delta_position_id = delta_position_id.unsqueeze(0).repeat(batch_size, 1)
-        
-        initial_response_position_ids = position_ids[:, -1:] + delta_position_id
-        initial_response_attention_mask = get_eos_mask(
-            response_id=initial_response, 
-            eos_token=eos_token_id, 
-            dtype=attention_mask.dtype
-        )
-        
-        # Prepare the initial sequence data
-        initial_seq = torch.cat([idx, initial_response], dim=-1)
-        initial_position_ids = torch.cat([position_ids, initial_response_position_ids], dim=-1)
-        initial_attention_mask = torch.cat([attention_mask, initial_response_attention_mask], dim=-1)
-        
-        # all the tp ranks should contain the same data here. data in all ranks are valid
-        batch = TensorDict(
-            {
-                'prompts': idx,
-                'responses': initial_response,  # Always use initial_response
-                'input_ids': initial_seq,  # prompt + initial_response
-                'attention_mask': initial_attention_mask,  # Always use initial_attention_mask
-                'position_ids': initial_position_ids,  # Always use initial_position_ids
-            },
-            batch_size=batch_size)
-        
-        # free vllm cache engine
-        if self.config.free_cache_engine:
-            self.inference_engine.free_cache_engine()
-
-        return DataProto(batch=batch)
+    
