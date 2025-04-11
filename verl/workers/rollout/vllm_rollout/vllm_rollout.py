@@ -279,10 +279,15 @@ class vLLMRollout(BaseRollout):
            (force_append_answer or prompts.meta_info.get('validate', False)):
             # tokenize the final answer
             finalans_token = self.thought_delimiter_end + self.finalans_token
+            finalans_positions = []
+            finalans_token_len = len(finalans_token)
             # Convert the prompt+initial response to a list of list of token ids
             extend_input_idx_list = []
             for i in range(batch_size):
                 striped_seq = _pre_process_extended_inputs(eos_token_id, initial_response[i])
+                
+                finalans_positions.append(len(striped_seq))
+                
                 striped_seq = (
                     idx_list[i // self.config.n] + striped_seq + finalans_token
                 )
@@ -323,7 +328,17 @@ class vLLMRollout(BaseRollout):
                 eos_token=eos_token_id, 
                 dtype=attention_mask.dtype
             )
+            
+            # now mask out the finalans_token in each sequence
+            logprob_mask = edit_attention_mask.clone()
+            for i in range(batch_size):
+                mask_start = finalans_positions[i]
+                mask_end = mask_start + finalans_token_len
+                if mask_end <= logprob_mask.size(1):
+                    logprob_mask[i, mask_start:mask_end] = 0
+            
             edit_attention_mask = torch.cat([attention_mask, edit_attention_mask], dim=-1)
+            logprob_mask = torch.cat([attention_mask, logprob_mask], dim=-1)
             
             edit_sequence = torch.cat([idx, edit_response], dim=-1)
             # create edit response position IDs
@@ -355,11 +370,13 @@ class vLLMRollout(BaseRollout):
                     'attention_mask': edit_attention_mask,
                     'input_ids': edit_sequence,
                     'position_ids': edit_position_ids,
+                    "logprob_mask": logprob_mask,
                 })
             else:
                 raise ValueError(
                     f'force_append_answer must be either "edit" or "overwrite", but got {force_append_answer}'
                 )
+            
 
         # free vllm cache engine
         if self.config.free_cache_engine:
