@@ -948,88 +948,88 @@ class RayPPOTrainer(object):
 
         return metric_dict
     
-    # def _validate_longer_response(self):
-    #     reward_tensor_lst = []
-    #     data_source_lst = []
+    def _validate_longer_response(self):
+        reward_tensor_lst = []
+        data_source_lst = []
 
-    #     # Lists to collect samples for the table
-    #     sample_inputs = []
-    #     sample_outputs = []
-    #     sample_scores = []
+        # Lists to collect samples for the table
+        sample_inputs = []
+        sample_outputs = []
+        sample_scores = []
 
-    #     for test_data in self.val_dataloader:
-    #         test_batch = DataProto.from_single_dict(test_data)
+        for test_data in self.val_dataloader:
+            test_batch = DataProto.from_single_dict(test_data)
 
-    #         # we only do validation on rule-based rm
-    #         if self.config.reward_model.enable and test_batch[0].non_tensor_batch['reward_model']['style'] == 'model':
-    #             return {}
+            # we only do validation on rule-based rm
+            if self.config.reward_model.enable and test_batch[0].non_tensor_batch['reward_model']['style'] == 'model':
+                return {}
 
-    #         # Store original inputs
-    #         input_ids = test_batch.batch['input_ids']
-    #         input_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in input_ids]
-    #         sample_inputs.extend(input_texts)
+            # Store original inputs
+            input_ids = test_batch.batch['input_ids']
+            input_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in input_ids]
+            sample_inputs.extend(input_texts)
 
-    #         if 'multi_modal_inputs' in test_batch.non_tensor_batch.keys():
-    #             test_gen_batch = test_batch.pop(
-    #                 batch_keys=['input_ids', 'attention_mask', 'position_ids'],
-    #                 non_tensor_batch_keys=['raw_prompt_ids', 'multi_modal_data', 'multi_modal_inputs'],
-    #             )
-    #         else:
-    #             test_gen_batch = test_batch.pop(
-    #                 batch_keys=['input_ids', 'attention_mask', 'position_ids'],
-    #                 non_tensor_batch_keys=['raw_prompt_ids'],
-    #             )
+            if 'multi_modal_inputs' in test_batch.non_tensor_batch.keys():
+                test_gen_batch = test_batch.pop(
+                    batch_keys=['input_ids', 'attention_mask', 'position_ids'],
+                    non_tensor_batch_keys=['raw_prompt_ids', 'multi_modal_data', 'multi_modal_inputs'],
+                )
+            else:
+                test_gen_batch = test_batch.pop(
+                    batch_keys=['input_ids', 'attention_mask', 'position_ids'],
+                    non_tensor_batch_keys=['raw_prompt_ids'],
+                )
 
-    #         test_gen_batch.meta_info = {
-    #             'eos_token_id': self.tokenizer.eos_token_id,
-    #             'pad_token_id': self.tokenizer.pad_token_id,
-    #             'recompute_log_prob': False,
-    #             'do_sample': False,
-    #             'validate': True,
-    #         }
+            test_gen_batch.meta_info = {
+                'eos_token_id': self.tokenizer.eos_token_id,
+                'pad_token_id': self.tokenizer.pad_token_id,
+                'recompute_log_prob': False,
+                'do_sample': False,
+                'validate': True,
+            }
 
-    #         # pad to be divisible by dp_size
-    #         test_gen_batch_padded, pad_size = pad_dataproto_to_divisor(test_gen_batch, self.actor_rollout_wg.world_size)
-    #         test_output_gen_batch_padded = self.actor_rollout_wg.generate_sequences_testlonger_response(test_gen_batch_padded)
-    #         # unpad
-    #         test_output_gen_batch = unpad_dataproto(test_output_gen_batch_padded, pad_size=pad_size)
-    #         print('Test longer response validation generation end')
+            # pad to be divisible by dp_size
+            test_gen_batch_padded, pad_size = pad_dataproto_to_divisor(test_gen_batch, self.actor_rollout_wg.world_size)
+            test_output_gen_batch_padded = self.actor_rollout_wg.generate_sequences_testlonger_response(test_gen_batch_padded)
+            # unpad
+            test_output_gen_batch = unpad_dataproto(test_output_gen_batch_padded, pad_size=pad_size)
+            print('Test longer response validation generation end')
 
-    #         # Store generated outputs
-    #         output_ids = test_output_gen_batch.batch['responses'] if 'edit_responses' not in test_output_gen_batch.batch.keys() else test_output_gen_batch.batch['edit_responses']
-    #         output_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in output_ids]
-    #         sample_outputs.extend(output_texts)
+            # Store generated outputs
+            output_ids = test_output_gen_batch.batch['responses'] if 'edit_responses' not in test_output_gen_batch.batch.keys() else test_output_gen_batch.batch['edit_responses']
+            output_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in output_ids]
+            sample_outputs.extend(output_texts)
 
-    #         test_batch = test_batch.union(test_output_gen_batch)
+            test_batch = test_batch.union(test_output_gen_batch)
 
-    #         # evaluate using reward_function
-    #         reward_tensor = self.val_reward_fn(test_batch)
+            # evaluate using reward_function
+            reward_tensor = self.val_reward_fn(test_batch)
 
-    #         # Store scores
-    #         scores = reward_tensor.sum(-1).cpu().tolist()
-    #         sample_scores.extend(scores)
+            # Store scores
+            scores = reward_tensor.sum(-1).cpu().tolist()
+            sample_scores.extend(scores)
 
-    #         reward_tensor_lst.append(reward_tensor)
-    #         data_source_lst.append(test_batch.non_tensor_batch.get('data_source', ['unknown'] * reward_tensor.shape[0]))
+            reward_tensor_lst.append(reward_tensor)
+            data_source_lst.append(test_batch.non_tensor_batch.get('data_source', ['unknown'] * reward_tensor.shape[0]))
 
-    #     self._maybe_log_val_generations_to_wandb(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
+        self._maybe_log_val_generations_to_wandb(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
-    #     reward_tensor = torch.cat(reward_tensor_lst, dim=0).sum(-1).cpu()  # (batch_size,)
-    #     data_sources = np.concatenate(data_source_lst, axis=0)
+        reward_tensor = torch.cat(reward_tensor_lst, dim=0).sum(-1).cpu()  # (batch_size,)
+        data_sources = np.concatenate(data_source_lst, axis=0)
 
-    #     # evaluate test_score based on data source
-    #     data_source_reward = {}
-    #     for i in range(reward_tensor.shape[0]):
-    #         data_source = data_sources[i]
-    #         if data_source not in data_source_reward:
-    #             data_source_reward[data_source] = []
-    #         data_source_reward[data_source].append(reward_tensor[i].item())
+        # evaluate test_score based on data source
+        data_source_reward = {}
+        for i in range(reward_tensor.shape[0]):
+            data_source = data_sources[i]
+            if data_source not in data_source_reward:
+                data_source_reward[data_source] = []
+            data_source_reward[data_source].append(reward_tensor[i].item())
 
-    #     metric_dict = {}
-    #     for data_source, rewards in data_source_reward.items():
-    #         metric_dict[f'val_doubleresponse/test_score/{data_source}'] = np.mean(rewards)
+        metric_dict = {}
+        for data_source, rewards in data_source_reward.items():
+            metric_dict[f'val_doubleresponse/test_score/{data_source}'] = np.mean(rewards)
 
-    #     return metric_dict
+        return metric_dict
     
 
     def init_workers(self):
@@ -1302,9 +1302,9 @@ class RayPPOTrainer(object):
             val_metrics = self._validate()
             pprint(f'Initial validation metrics: {val_metrics}')
             logger.log(data=val_metrics, step=self.global_steps)
-            # longer_response_val_metrics = self._validate_longer_response()
-            # print(f'Longer response validation metrics: {longer_response_val_metrics}')
-            # logger.log(data=longer_response_val_metrics, step=self.global_steps)
+            longer_response_val_metrics = self._validate_longer_response()
+            print(f'Longer response validation metrics: {longer_response_val_metrics}')
+            logger.log(data=longer_response_val_metrics, step=self.global_steps)
             if self.config.trainer.get('val_only', False):
                 return
 
