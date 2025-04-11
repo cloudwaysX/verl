@@ -1367,23 +1367,25 @@ class RayPPOTrainer(object):
                     with _timer('train_step', timing_raw):
                         # generate a batch
                         with _timer('gen', timing_raw):
+                            gen_batch.meta_info['epoch'] = epoch
                             gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
 
-                        if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
-                            with _timer('gen_max', timing_raw):
-                                gen_baseline_batch = deepcopy(gen_batch)
-                                gen_baseline_batch.meta_info['do_sample'] = False
-                                gen_baseline_output = self.actor_rollout_wg.generate_sequences(gen_baseline_batch)
+                        # [Note used here.]
+                        # if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
+                        #     with _timer('gen_max', timing_raw):
+                        #         gen_baseline_batch = deepcopy(gen_batch)
+                        #         gen_baseline_batch.meta_info['do_sample'] = False
+                        #         gen_baseline_output = self.actor_rollout_wg.generate_sequences(gen_baseline_batch)
 
-                                batch = batch.union(gen_baseline_output)
-                                reward_baseline_tensor = self.reward_fn(batch)
-                                reward_baseline_tensor = reward_baseline_tensor.sum(dim=-1)
+                        #         batch = batch.union(gen_baseline_output)
+                        #         reward_baseline_tensor = self.reward_fn(batch)
+                        #         reward_baseline_tensor = reward_baseline_tensor.sum(dim=-1)
 
-                                batch.pop(batch_keys=list(gen_baseline_output.batch.keys()))
+                        #         batch.pop(batch_keys=list(gen_baseline_output.batch.keys()))
 
-                                batch.batch['reward_baselines'] = reward_baseline_tensor
+                        #         batch.batch['reward_baselines'] = reward_baseline_tensor
 
-                                del gen_baseline_batch, gen_baseline_output
+                        #         del gen_baseline_batch, gen_baseline_output
 
 
 
@@ -1475,7 +1477,9 @@ class RayPPOTrainer(object):
                         self.global_steps % self.config.trainer.test_freq == 0:
                         with _timer('testing', timing_raw):
                             val_metrics: dict = self._validate()
+                            longer_response_val_metrics = self._validate_longer_response()
                         metrics.update(val_metrics)
+                        metrics.update(longer_response_val_metrics)
 
                     if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
                         with _timer('save_checkpoint', timing_raw):
@@ -1527,7 +1531,11 @@ class RayPPOTrainer(object):
                     # perform validation after training
                     if self.val_reward_fn is not None:
                         val_metrics = self._validate()
+                        longer_response_val_metrics = self._validate_longer_response()
+                        metrics.update(val_metrics)
+                        metrics.update(longer_response_val_metrics)
                         pprint(f'Final validation metrics: {val_metrics}')
+                        pprint(f'Final longer response validation metrics: {longer_response_val_metrics}')
                         logger.log(data=val_metrics, step=self.global_steps)
                     if self.config.trainer.save_freq > 0 and \
                             (self.global_steps - 1) % self.config.trainer.save_freq != 0:

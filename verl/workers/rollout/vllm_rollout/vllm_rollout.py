@@ -334,7 +334,15 @@ class vLLMRollout(BaseRollout):
             edit_position_ids = torch.cat([position_ids, edit_response_position_ids], dim=-1)
             
             
-            if force_append_answer == "edit" or prompts.meta_info.get('validate', False):
+            if prompts.meta_info.get('validate', False):
+                force_append_answer = "edit"
+            elif force_append_answer == "alternate":
+                if prompts.meta_info['epoch'] % 2 == 1:
+                    force_append_answer = "edit"
+                else:
+                    force_append_answer = "overwrite"
+            
+            if force_append_answer == "edit":
                 batch.update({
                     'edit_responses': edit_response,
                     'edit_attention_mask': edit_attention_mask,
