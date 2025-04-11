@@ -72,7 +72,7 @@ class NaiveRewardManager:
             )
             
             # If the score is less than 1 and edit_responses exists, try with edited response
-            if score < 1 and 'edit_responses' in data.batch:
+            if score < 1 and 'edit_responses' in data.batch and edit_weight > 0:
                 assert self.edit_weight is not None, 'edit_weight is not set while edit_responses exists'
                 # Try with edited responses
                 edit_response_ids = data_item.batch['edit_responses']
