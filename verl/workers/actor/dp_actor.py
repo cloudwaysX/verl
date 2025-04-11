@@ -202,6 +202,8 @@ class DataParallelPPOActor(BasePPOActor):
         use_dynamic_bsz = data.meta_info['use_dynamic_bsz']
 
         select_keys = ['responses', 'input_ids', 'attention_mask', 'position_ids']
+        if "logprob_mask" in data.batch.keys():
+            select_keys.append("logprob_mask")
         batch = data.select(batch_keys=select_keys).batch
         has_multi_modal_inputs = 'multi_modal_inputs' in data.non_tensor_batch.keys()
 

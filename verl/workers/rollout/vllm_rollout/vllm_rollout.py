@@ -349,7 +349,7 @@ class vLLMRollout(BaseRollout):
             edit_position_ids = torch.cat([position_ids, edit_response_position_ids], dim=-1)
             
             
-            if prompts.meta_info.get('validate', False):
+            if prompts.meta_info.get('validate', False) and self.config.get("use_edit_for_validation", False):
                 force_append_answer = "edit"
             elif force_append_answer == "alternate":
                 if prompts.meta_info['epoch'] % 2 == 1:
