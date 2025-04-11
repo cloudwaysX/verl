@@ -276,7 +276,7 @@ class vLLMRollout(BaseRollout):
         # =========Second Generation Pass: Generate final answer using COT =========
         # If validation, we always append the final answer to maximize results.
         if not prompts.meta_info.get('longer_response', False) and \
-           (force_append_answer or prompts.meta_info.get('validate', False)):
+           (force_append_answer or (prompts.meta_info.get('validate', False) and self.config.get("use_edit_for_validation", False))):
             # tokenize the final answer
             finalans_token = self.thought_delimiter_end + self.finalans_token
             finalans_positions = []
