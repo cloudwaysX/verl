@@ -1303,9 +1303,9 @@ class RayPPOTrainer(object):
             val_metrics = self._validate()
             pprint(f'Initial validation metrics: {val_metrics}')
             logger.log(data=val_metrics, step=self.global_steps)
-            longer_response_val_metrics = self._validate_longer_response()
-            print(f'Longer response validation metrics: {longer_response_val_metrics}')
-            logger.log(data=longer_response_val_metrics, step=self.global_steps)
+            # longer_response_val_metrics = self._validate_longer_response()
+            # print(f'Longer response validation metrics: {longer_response_val_metrics}')
+            # logger.log(data=longer_response_val_metrics, step=self.global_steps)
             if self.config.trainer.get('val_only', False):
                 return
 
@@ -1477,9 +1477,9 @@ class RayPPOTrainer(object):
                         self.global_steps % self.config.trainer.test_freq == 0:
                         with _timer('testing', timing_raw):
                             val_metrics: dict = self._validate()
-                            longer_response_val_metrics = self._validate_longer_response()
+                            # longer_response_val_metrics = self._validate_longer_response()
                         metrics.update(val_metrics)
-                        metrics.update(longer_response_val_metrics)
+                        # metrics.update(longer_response_val_metrics)
 
                     if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
                         with _timer('save_checkpoint', timing_raw):
@@ -1531,11 +1531,11 @@ class RayPPOTrainer(object):
                     # perform validation after training
                     if self.val_reward_fn is not None:
                         val_metrics = self._validate()
-                        longer_response_val_metrics = self._validate_longer_response()
+                        # longer_response_val_metrics = self._validate_longer_response()
                         metrics.update(val_metrics)
-                        metrics.update(longer_response_val_metrics)
+                        # metrics.update(longer_response_val_metrics)
                         pprint(f'Final validation metrics: {val_metrics}')
-                        pprint(f'Final longer response validation metrics: {longer_response_val_metrics}')
+                        # pprint(f'Final longer response validation metrics: {longer_response_val_metrics}')
                         logger.log(data=val_metrics, step=self.global_steps)
                     if self.config.trainer.save_freq > 0 and \
                             (self.global_steps - 1) % self.config.trainer.save_freq != 0:
