@@ -137,11 +137,11 @@ class DataParallelPPOActor(BasePPOActor):
                                            indices=indices,
                                            batch=batch_size,
                                            seqlen=seqlen)
-                print(f"[DEBUG] full_log_probs sum before mask: {full_log_probs.sum()}")
+                # print(f"[DEBUG] full_log_probs sum before mask: {full_log_probs.sum()}")
                 if "logprob_mask" in micro_batch:
                     full_log_probs = full_log_probs * micro_batch["logprob_mask"].unsqueeze(-1)
                     full_entropy = full_entropy * micro_batch["logprob_mask"].unsqueeze(-1)
-                    print(f"[DEBUG] full_log_probs sum after mask: {full_log_probs.sum()}")
+                    # print(f"[DEBUG] full_log_probs sum after mask: {full_log_probs.sum()}")
 
                 # only return response part:
                 entropy = full_entropy.squeeze(-1)[:, -response_length - 1:-1]  # (bsz, response_length)

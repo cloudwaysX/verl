@@ -355,7 +355,7 @@ def compute_data_metrics(batch, use_critic=True):
         'response_length/min':
             torch.min(response_length).detach().item(),
         'response_length/clip_ratio':
-            torch.mean(torch.eq(response_length, max_response_length).float()).detach().item(),
+            torch.mean(torch.ge(response_length, max_response_length).float()).detach().item(),
         # prompt length
         'prompt_length/mean':
             torch.mean(prompt_length).detach().item(),
