@@ -21,11 +21,12 @@ class NaiveRewardManager:
     """The reward manager.
     """
 
-    def __init__(self, tokenizer, num_examine, compute_score=None, edit_weight=1) -> None:
+    def __init__(self, tokenizer, num_examine, compute_score=None, edit_weight=1, max_response_length=99999) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or _default_compute_score
         self.edit_weight = edit_weight
+        self.max_response_length = max_response_length
 
     def __call__(self, data: DataProto):
         """We will expand this function gradually based on the available datasets"""
@@ -70,6 +71,12 @@ class NaiveRewardManager:
                 ground_truth=ground_truth,
                 extra_info=extra_info,
             )
+            
+            if "edit_responses" not in data.batch:
+                # If edit_responses does not exist, that means we may in the overwrite mode.
+                # In this case, we use the score weight by examining the length of the response
+                if initial_response_length > self.max_response_length:
+                    score = score * edit_weight
             
             # If the score is less than 1 and edit_responses exists, try with edited response
             if score < 1 and 'edit_responses' in data.batch and edit_weight > 0:
