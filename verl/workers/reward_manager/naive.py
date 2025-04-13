@@ -34,9 +34,6 @@ class NaiveRewardManager:
         # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
         if 'rm_scores' in data.batch.keys():
             return data.batch['rm_scores']
-        
-        # Define edit weight - punishment factor for using edit results
-        edit_weight = 0.8  # You can adjust this value as needed (< 1)
 
         # When compute the reward, always use the initial response
         reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
@@ -77,10 +74,10 @@ class NaiveRewardManager:
                 # In this case, we use the score weight by examining the length of the response
                 if initial_response_length > self.max_response_length:
                     # print("DEBUG use edit weight")
-                    score = score * edit_weight
+                    score = score * self.edit_weight
             
             # If the score is less than 1 and edit_responses exists, try with edited response
-            if score < 1 and 'edit_responses' in data.batch and edit_weight > 0:
+            if score < 1 and 'edit_responses' in data.batch and self.edit_weight > 0:
                 assert self.edit_weight is not None, 'edit_weight is not set while edit_responses exists'
                 # Try with edited responses
                 edit_response_ids = data_item.batch['edit_responses']
