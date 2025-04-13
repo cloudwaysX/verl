@@ -76,6 +76,7 @@ class NaiveRewardManager:
                 # If edit_responses does not exist, that means we may in the overwrite mode.
                 # In this case, we use the score weight by examining the length of the response
                 if initial_response_length > self.max_response_length:
+                    # print("DEBUG use edit weight")
                     score = score * edit_weight
             
             # If the score is less than 1 and edit_responses exists, try with edited response

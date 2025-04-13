@@ -10,7 +10,7 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 
 PROJECT_NAME='deepscaler_4k'
-EXPERIMENT_NAME='test_deepscaler-1.5b-2k_foceansoverwrite' 
+EXPERIMENT_NAME='deepscaler-1.5b-2k_foceansoverwrite_w80_cliphigh3' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
@@ -33,7 +33,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
-    actor_rollout_ref.actor.clip_ratio=0.2 \
+    actor_rollout_ref.actor.clip_ratio=0.24 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     +actor_rollout_ref.actor.fsdp_config.grad_offload=False \
@@ -57,12 +57,12 @@ python3 -m verl.trainer.main_ppo \
     +trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
-    trainer.save_freq=100 \
+    trainer.save_freq=30 \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
-    trainer.total_epochs=40 "${@:1}"\
+    trainer.total_epochs=10 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
-    reward_model.edit_weight=0.0 \
+    reward_model.edit_weight=0.8 \
     active_strategy.selection_metric=null \
     active_strategy.strategy_type=null
