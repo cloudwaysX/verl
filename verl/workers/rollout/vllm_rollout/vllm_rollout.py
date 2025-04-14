@@ -315,14 +315,15 @@ class vLLMRollout(BaseRollout):
             edit_response = pad_sequence(response_list, batch_first=True, padding_value=self.pad_token_id)
             
             # Make sure edit_response has correct length before calculating attention mask
-            print("edit_response.shape: before final padding", edit_response.shape)
-            if edit_response.shape[1] < self.config.response_length + MAX_FINAL_ANSWER_LENGTH:
+            # print("edit_response.shape: before final padding", edit_response.shape)
+            # print("len of finalans_token: ", len(finalans_token))
+            if edit_response.shape[1] < self.config.response_length + MAX_FINAL_ANSWER_LENGTH + len(finalans_token):
                 edit_response = pad_sequence_to_length(
                     edit_response, 
                     self.config.response_length + MAX_FINAL_ANSWER_LENGTH, 
                     self.pad_token_id
                 )
-            print("edit_response.shape: after final padding", edit_response.shape)
+            # print("edit_response.shape: after final padding", edit_response.shape)
             
             # Create edit_attention_mask based on edit_response
             edit_attention_mask = get_eos_mask(
