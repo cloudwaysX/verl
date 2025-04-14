@@ -109,6 +109,18 @@ class vLLMRollout(BaseRollout):
                 
         self.append_answer_len = self.config.get('append_answer_len', MAX_FINAL_ANSWER_LENGTH)
         # TODO(yifangc): not consider adding the response length
+        
+        self.pad_token_id = tokenizer.pad_token_id
+        self.finalans_token = tokenizer.encode(
+            '\n\n**Final Answer**: ', add_special_tokens=False
+        )
+        self.thought_delimiter_start = tokenizer.encode(
+            THOUGHT_DELIMITER_START, add_special_tokens=False
+        )
+        self.thought_delimiter_end = tokenizer.encode(
+            THOUGHT_DELIMITER_END, add_special_tokens=False
+        )
+
         finalans_token_len = len(self.thought_delimiter_end + self.finalans_token)
         possible_model_len = config.prompt_length + config.response_length + self.append_answer_len + finalans_token_len
         assert model_hf_config.max_position_embeddings >= possible_model_len, \
@@ -158,16 +170,6 @@ class vLLMRollout(BaseRollout):
         print(f"kwargs: {kwargs}")
         self.sampling_params = SamplingParams(**kwargs)
 
-        self.pad_token_id = tokenizer.pad_token_id
-        self.finalans_token = tokenizer.encode(
-            '\n\n**Final Answer**: ', add_special_tokens=False
-        )
-        self.thought_delimiter_start = tokenizer.encode(
-            THOUGHT_DELIMITER_START, add_special_tokens=False
-        )
-        self.thought_delimiter_end = tokenizer.encode(
-            THOUGHT_DELIMITER_END, add_special_tokens=False
-        )
 
     @contextmanager
     def update_sampling_params(self, **kwargs):
