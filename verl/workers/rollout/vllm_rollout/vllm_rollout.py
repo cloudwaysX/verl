@@ -320,7 +320,7 @@ class vLLMRollout(BaseRollout):
             if edit_response.shape[1] < self.config.response_length + MAX_FINAL_ANSWER_LENGTH + len(finalans_token):
                 edit_response = pad_sequence_to_length(
                     edit_response, 
-                    self.config.response_length + MAX_FINAL_ANSWER_LENGTH, 
+                    self.config.response_length + MAX_FINAL_ANSWER_LENGTH + len(finalans_token), 
                     self.pad_token_id
                 )
             # print("edit_response.shape: after final padding", edit_response.shape)
