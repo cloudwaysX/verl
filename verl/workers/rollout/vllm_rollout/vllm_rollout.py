@@ -340,8 +340,12 @@ class vLLMRollout(BaseRollout):
             for i in range(batch_size):
                 mask_start = finalans_positions[i]
                 mask_end = mask_start + finalans_token_len
-                if mask_end <= logprob_mask.size(1):
-                    logprob_mask[i, mask_start:mask_end] = 0
+                
+                if mask_start >= self.config.response_length:
+                    if mask_end <= logprob_mask.size(1):
+                        logprob_mask[i, mask_start:mask_end] = 0
+                else:
+                    logprob_mask[i, mask_start:] = 0
             
             edit_attention_mask = torch.cat([attention_mask, edit_attention_mask], dim=-1)
             logprob_mask = torch.cat([attention_mask, logprob_mask], dim=-1)
