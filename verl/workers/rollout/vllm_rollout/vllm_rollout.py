@@ -106,12 +106,15 @@ class vLLMRollout(BaseRollout):
             if vllm_version in ('0.4.2', '0.5.4', '0.6.3'):
                 vllm_ps.initialize_parallel_state(tensor_model_parallel_size=tensor_parallel_size,
                                                   num_tp_per_train_tp=num_tp_per_train_tp)
-
-        assert model_hf_config.max_position_embeddings >= config.prompt_length + config.response_length, \
+                
+        self.append_answer_len = self.config.get('append_answer_len', MAX_FINAL_ANSWER_LENGTH)
+        # TODO(yifangc): not consider adding the response length
+        finalans_token_len = len(self.thought_delimiter_end + self.finalans_token)
+        possible_model_len = config.prompt_length + config.response_length + self.append_answer_len + finalans_token_len
+        assert model_hf_config.max_position_embeddings >= possible_model_len, \
             "model context length should be greater than total sequence length"
-
         max_model_len = self.config.max_model_len if self.config.max_model_len \
-                        else config.prompt_length + config.response_length
+                        else possible_model_len
         max_model_len = int(max_model_len)
 
         if max_num_batched_tokens < max_model_len and self.config.enable_chunked_prefill:
@@ -295,7 +298,7 @@ class vLLMRollout(BaseRollout):
 
             kwargs2 = {
                 'n': 1,
-                'max_tokens': MAX_FINAL_ANSWER_LENGTH,
+                'max_tokens': self.append_answer_len,
             }
             with self.update_sampling_params(**kwargs2):
                 output = self.inference_engine.generate(
@@ -317,10 +320,10 @@ class vLLMRollout(BaseRollout):
             # Make sure edit_response has correct length before calculating attention mask
             # print("edit_response.shape: before final padding", edit_response.shape)
             # print("len of finalans_token: ", len(finalans_token))
-            if edit_response.shape[1] < self.config.response_length + MAX_FINAL_ANSWER_LENGTH + len(finalans_token):
+            if edit_response.shape[1] < self.config.response_length + self.append_answer_len + len(finalans_token):
                 edit_response = pad_sequence_to_length(
                     edit_response, 
-                    self.config.response_length + MAX_FINAL_ANSWER_LENGTH + len(finalans_token), 
+                    self.config.response_length + self.append_answer_len + len(finalans_token), 
                     self.pad_token_id
                 )
             # print("edit_response.shape: after final padding", edit_response.shape)
@@ -337,8 +340,12 @@ class vLLMRollout(BaseRollout):
             for i in range(batch_size):
                 mask_start = finalans_positions[i]
                 mask_end = mask_start + finalans_token_len
-                if mask_end <= logprob_mask.size(1):
-                    logprob_mask[i, mask_start:mask_end] = 0
+                
+                if mask_start >= self.config.response_length:
+                    if mask_end <= logprob_mask.size(1):
+                        logprob_mask[i, mask_start:mask_end] = 0
+                else:
+                    logprob_mask[i, mask_start:] = 0
             
             edit_attention_mask = torch.cat([attention_mask, edit_attention_mask], dim=-1)
             logprob_mask = torch.cat([attention_mask, logprob_mask], dim=-1)
