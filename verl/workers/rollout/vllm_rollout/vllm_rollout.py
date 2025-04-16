@@ -114,12 +114,16 @@ class vLLMRollout(BaseRollout):
         self.finalans_token = tokenizer.encode(
             '\n\n**Final Answer**: ', add_special_tokens=False
         )
+        self.finalrethink_token = tokenizer.encode(
+            '\n\n Wait, let\'s verify again: ', add_special_tokens=False
+        )
         self.thought_delimiter_start = tokenizer.encode(
             THOUGHT_DELIMITER_START, add_special_tokens=False
         )
         self.thought_delimiter_end = tokenizer.encode(
             THOUGHT_DELIMITER_END, add_special_tokens=False
         )
+        self.append_rethink_tokens = self.config.get('append_rethink_tokens', False)
 
         finalans_token_len = len(self.thought_delimiter_end + self.finalans_token)
         possible_model_len = config.prompt_length + config.response_length + self.append_answer_len + finalans_token_len
@@ -284,18 +288,26 @@ class vLLMRollout(BaseRollout):
            (force_append_answer or (prompts.meta_info.get('validate', False) and self.config.get("use_edit_for_validation", False))):
             # tokenize the final answer
             finalans_token = self.thought_delimiter_end + self.finalans_token
-            finalans_positions = []
             finalans_token_len = len(finalans_token)
+            finalrethink_token = self.thought_delimiter_start + self.finalrethink_token
+            finalrethink_token_len = len(finalrethink_token)
+            finalappend_positions = []
             # Convert the prompt+initial response to a list of list of token ids
             extend_input_idx_list = []
             for i in range(batch_size):
                 striped_seq = _pre_process_extended_inputs(eos_token_id, initial_response[i])
                 
-                finalans_positions.append(len(striped_seq))
+                finalappend_positions.append(len(striped_seq))
                 
-                striped_seq = (
-                    idx_list[i // self.config.n] + striped_seq + finalans_token
-                )
+                if len(striped_seq) >= self.config.response_length:
+                    striped_seq = (
+                        idx_list[i // self.config.n] + striped_seq + finalans_token
+                    )
+                else:
+                    striped_seq = (
+                            idx_list[i // self.config.n] + striped_seq + finalrethink_token
+                    )
+                
                 extend_input_idx_list.append(striped_seq)
 
             kwargs2 = {
@@ -314,11 +326,13 @@ class vLLMRollout(BaseRollout):
             response_list = []
             for i in range(batch_size):
                 orig_prompt_len = len(idx_list[i//self.config.n])
-                if finalans_positions[i] >= self.config.response_length:
+                if finalappend_positions[i] >= self.config.response_length:
                     seq = extend_input_idx_list[i][orig_prompt_len:]+second_response[i].tolist()
                 else:
-                    # If the first response is already finished, then add eos token back and do not use the second response
-                    seq = extend_input_idx_list[i][orig_prompt_len:-finalans_token_len]+[eos_token_id]
+                    if self.append_rethink_tokens:
+                        seq = extend_input_idx_list[i][orig_prompt_len:]+second_response[i].tolist()
+                    else:
+                        seq = extend_input_idx_list[i][orig_prompt_len:-finalrethink_token_len] + [eos_token_id]
                 response_list.append(torch.tensor(seq, device=idx.device, dtype=idx.dtype))
             
             edit_response = pad_sequence(response_list, batch_first=True, padding_value=self.pad_token_id)
@@ -343,10 +357,12 @@ class vLLMRollout(BaseRollout):
             # now mask out the finalans_token in each sequence
             logprob_mask = edit_attention_mask.clone()
             for i in range(batch_size):
-                mask_start = finalans_positions[i]
-                mask_end = mask_start + finalans_token_len
-                
+                mask_start = finalappend_positions[i]
                 if mask_start >= self.config.response_length:
+                    mask_end = mask_start + finalans_token_len
+                    logprob_mask[i, mask_start:min(mask_end, logprob_mask.size(1))] = 0
+                elif self.append_rethink_tokens:
+                    mask_end = mask_start + finalrethink_token_len
                     logprob_mask[i, mask_start:min(mask_end, logprob_mask.size(1))] = 0
             
             edit_attention_mask = torch.cat([attention_mask, edit_attention_mask], dim=-1)
