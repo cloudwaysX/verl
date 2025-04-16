@@ -318,7 +318,7 @@ class vLLMRollout(BaseRollout):
                     seq = extend_input_idx_list[i][orig_prompt_len:]+second_response[i].tolist()
                 else:
                     # If the first response is already finished, then add eos token back and do not use the second response
-                    seq = extend_input_idx_list[i][orig_prompt_len:]+[eos_token_id]
+                    seq = extend_input_idx_list[i][orig_prompt_len:-finalans_token_len]+[eos_token_id]
                 response_list.append(torch.tensor(seq, device=idx.device, dtype=idx.dtype))
             
             edit_response = pad_sequence(response_list, batch_first=True, padding_value=self.pad_token_id)
@@ -333,7 +333,6 @@ class vLLMRollout(BaseRollout):
                     self.pad_token_id
                 )
             # print("edit_response.shape: after final padding", edit_response.shape)
-            
             # Create edit_attention_mask based on edit_response
             edit_attention_mask = get_eos_mask(
                 response_id=edit_response, 
