@@ -199,7 +199,6 @@ class vLLMRollout(BaseRollout):
     
     def generate_sequences(self, prompts: DataProto,  **kwargs) -> DataProto:
         
-        force_append_answer = self.config.force_append_answers
         # rebuild vllm cache engine
         if self.config.free_cache_engine:
             self.inference_engine.init_cache_engine()
@@ -230,8 +229,9 @@ class vLLMRollout(BaseRollout):
                 'n': 1  # if greedy, only 1 response
             }
             
-        if prompts.meta_info.get('longer_response', False):
-            kwargs["max_tokens"] = self.config.response_length*2
+        # TODO(yifangc): add longer response support
+        # if prompts.meta_info.get('longer_response', False):
+        #     kwargs["max_tokens"] = self.config.response_length*2
 
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs):
@@ -288,9 +288,12 @@ class vLLMRollout(BaseRollout):
         
         # =========Second Generation Pass: Generate final answer using COT =========
         # If validation, we always append the final answer to maximize results.
-        if not prompts.meta_info.get('longer_response', False) and \
-           (force_append_answer or (prompts.meta_info.get('validate', False) and self.config.get("use_edit_for_validation", False))):
-               
+        if prompts.meta_info.get('validate', False):
+            enter_second_generation = self.config.get("use_edit_for_validation", False)
+        else:
+            enter_second_generation = True if self.force_append_answer is not None else False
+            
+        if enter_second_generation:
             if prompts.meta_info.get('validate', False):
                 append_think_tokens = False
             else:
@@ -386,22 +389,14 @@ class vLLMRollout(BaseRollout):
             edit_position_ids = torch.cat([position_ids, edit_response_position_ids], dim=-1)
             
             
-            if prompts.meta_info.get('validate', False) and self.config.get("use_edit_for_validation", False):
-                force_append_answer = "edit"
-            elif force_append_answer == "alternate":
-                if prompts.meta_info['epoch'] % 2 == 1:
-                    force_append_answer = "edit"
-                else:
-                    force_append_answer = "overwrite"
-            
-            if force_append_answer == "edit":
+            if self.force_append_answer == "edit":
                 batch.update({
                     'edit_responses': edit_response,
                     'edit_attention_mask': edit_attention_mask,
                     'edit_input_ids': edit_sequence,
                     'edit_position_ids': edit_position_ids,
                 })
-            elif force_append_answer == "overwrite":
+            elif self.force_append_answer == "overwrite":
                 batch.update({
                     'responses': edit_response,
                     'attention_mask': edit_attention_mask,
