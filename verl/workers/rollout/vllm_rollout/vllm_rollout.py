@@ -111,8 +111,9 @@ class vLLMRollout(BaseRollout):
         # TODO(yifangc): not consider adding the response length
         
         self.pad_token_id = tokenizer.pad_token_id
+        finalans = self.config.get('finalans', '\n\n**Final Answer**: ')
         self.finalans_token = tokenizer.encode(
-            '\n\n**Final Answer**: ', add_special_tokens=False
+            finalans: ', add_special_tokens=False
         )
         self.finalrethink_token = tokenizer.encode(
             '\n\n Wait, let\'s verify again: ', add_special_tokens=False
@@ -124,6 +125,9 @@ class vLLMRollout(BaseRollout):
             THOUGHT_DELIMITER_END, add_special_tokens=False
         )
         self.append_rethink_tokens = self.config.get('append_rethink_tokens', False)
+        self.forceans_for_untruncated = self.config.get('forceans_for_untruncated', False)
+        assert not (self.forceans_for_untruncated and self.append_rethink_tokens), \
+            "forceans_for_untruncated and append_rethink_tokens cannot be both True"
 
         finalans_token_len = len(self.thought_delimiter_end + self.finalans_token)
         possible_model_len = config.prompt_length + config.response_length + self.append_answer_len + finalans_token_len
@@ -335,7 +339,7 @@ class vLLMRollout(BaseRollout):
                     seq = extend_input_idx_list[i][orig_prompt_len:]+second_response[i].tolist()
                 elif append_think_tokens:
                     seq = extend_input_idx_list[i][orig_prompt_len:]+second_response[i].tolist()
-                else:
+                elif not self.forceans_for_untruncated:
                     seq = extend_input_idx_list[i][orig_prompt_len:-finalans_token_len] + [eos_token_id]
                 response_list.append(torch.tensor(seq, device=idx.device, dtype=idx.dtype))
             
@@ -363,12 +367,13 @@ class vLLMRollout(BaseRollout):
             logprob_mask = edit_attention_mask.clone()
             for i in range(batch_size):
                 mask_start = finalappend_positions[i]
-                if mask_start >= self.config.response_length:
+                if mask_start >= self.config.response_length or self.forceans_for_untruncated:
                     mask_end = mask_start + finalans_token_len
                     logprob_mask[i, mask_start:min(mask_end, logprob_mask.size(1))] = 0
                 elif append_think_tokens:
                     mask_end = mask_start + finalrethink_token_len
                     logprob_mask[i, mask_start:min(mask_end, logprob_mask.size(1))] = 0
+
             
             edit_attention_mask = torch.cat([attention_mask, edit_attention_mask], dim=-1)
             logprob_mask = torch.cat([attention_mask, logprob_mask], dim=-1)
