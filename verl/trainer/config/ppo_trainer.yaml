@@ -98,6 +98,7 @@ actor_rollout_ref:
     # number of responses (i.e. num sample times)
     n: 1 # > 1 for grpo
     force_append_answers: None
+    finalans: "Therefore, the final answer is "
 
 critic:
   strategy: fsdp
