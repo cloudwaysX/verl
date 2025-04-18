@@ -236,8 +236,8 @@ class vLLMRollout(BaseRollout):
             }
             
         # TODO(yifangc): add longer response support
-        # if prompts.meta_info.get('longer_response', False):
-        #     kwargs["max_tokens"] = self.config.response_length*2
+        if prompts.meta_info.get('use_longer_response', False):
+            kwargs["max_tokens"] = self.config.response_length+1024
 
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs):
@@ -257,10 +257,13 @@ class vLLMRollout(BaseRollout):
             batch_size = batch_size * self.config.n
         
         # Make sure initial_response has correct length before calculating position IDs and attention masks
-        if initial_response.shape[1] < self.config.response_length:
+        the_max_response_length = self.config.response_length
+        if prompts.meta_info.get('use_longer_response', False):
+            the_max_response_length += 1024
+        if initial_response.shape[1] < the_max_response_length:
             initial_response = pad_sequence_to_length(
                 initial_response, 
-                self.config.response_length, 
+                the_max_response_length, 
                 self.pad_token_id
             )
         
@@ -295,7 +298,7 @@ class vLLMRollout(BaseRollout):
         # =========Second Generation Pass: Generate final answer using COT =========
         # If validation, we always append the final answer to maximize results.
         if prompts.meta_info.get('validate', False):
-            enter_second_generation = self.config.get("use_edit_for_validation", False)
+            enter_second_generation = prompts.meta_info.get('use_edit_for_validation', False)
         else:
             enter_second_generation = True if self.config.force_append_answers is not None else False
             
@@ -306,7 +309,7 @@ class vLLMRollout(BaseRollout):
                 append_think_tokens = self.append_rethink_tokens
 
             # tokenize the final answer
-            finalans_token = self.thought_delimiter_end + self.finalans_token
+            finalans_token =  self.finalans_token
             finalrethink_token = self.thought_delimiter_start + self.finalrethink_token
             finalappend_pos_start = []
             finalappend_pos_end = []
