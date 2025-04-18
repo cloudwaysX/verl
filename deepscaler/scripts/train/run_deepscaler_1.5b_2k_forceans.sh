@@ -9,8 +9,8 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 
-PROJECT_NAME='deepscaler_4k'
-EXPERIMENT_NAME='v2_deepscaler-1.5b-2k_focethinkoverwrite_w80_cliphigh3' 
+PROJECT_NAME='deepscaler_4k_v2'
+EXPERIMENT_NAME='v3_deepscaler-1.5b-2k_foceansoverwrite_w80_cliphigh3' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
@@ -46,8 +46,9 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.n=8 \
     +actor_rollout_ref.rollout.n_val=8 \
     +actor_rollout_ref.rollout.use_edit_for_validation=True \
+    +actor_rollout_ref.rollout.use_longer_response_for_validation=True \
     actor_rollout_ref.rollout.force_append_answers="overwrite" \
-    +actor_rollout_ref.rollout.append_rethink_tokens=True \
+    +actor_rollout_ref.rollout.append_rethink_tokens=False \
     +actor_rollout_ref.rollout.forceans_for_untruncated=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=8192 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
