@@ -295,7 +295,7 @@ class vLLMRollout(BaseRollout):
         # =========Second Generation Pass: Generate final answer using COT =========
         # If validation, we always append the final answer to maximize results.
         if prompts.meta_info.get('validate', False):
-            enter_second_generation = self.config.get("use_edit_for_validation", False)
+            enter_second_generation = prompts.meta_info.get('use_edit_for_validation', False)
         else:
             enter_second_generation = True if self.config.force_append_answers is not None else False
             
