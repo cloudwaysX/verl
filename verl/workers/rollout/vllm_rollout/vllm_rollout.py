@@ -260,7 +260,7 @@ class vLLMRollout(BaseRollout):
         the_max_response_length = self.config.response_length
         if prompts.meta_info.get('use_longer_response', False):
             the_max_response_length += 1024
-        if initial_response.shape[1] < the_max_response_length
+        if initial_response.shape[1] < the_max_response_length:
             initial_response = pad_sequence_to_length(
                 initial_response, 
                 the_max_response_length, 
