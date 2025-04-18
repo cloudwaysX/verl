@@ -1221,7 +1221,7 @@ class RayPPOTrainer(object):
         # currently, we only support validation using the reward_function.
         if self.val_reward_fn is not None and self.config.trainer.get('val_before_train', True):
             val_metrics = self._validate()
-            if self.config.actor_rollout_ref.actor.rollout.get('use_edit_for_validation', False):
+            if self.config.actor_rollout_ref.rollout.get('use_edit_for_validation', False):
                 edit_metrics = self._validate(use_editval=True)
                 val_metrics.update(edit_metrics)
             pprint(f'Initial validation metrics: {val_metrics}')
@@ -1400,7 +1400,7 @@ class RayPPOTrainer(object):
                         self.global_steps % self.config.trainer.test_freq == 0:
                         with _timer('testing', timing_raw):
                             val_metrics: dict = self._validate()
-                            if self.config.actor_rollout_ref.actor.rollout.get('use_edit_for_validation', False):
+                            if self.config.actor_rollout_ref.rollout.get('use_edit_for_validation', False):
                                 edit_metrics = self._validate(use_editval=True)
                                 val_metrics.update(edit_metrics)
                             # longer_response_val_metrics = self._validate_longer_response()
@@ -1457,7 +1457,7 @@ class RayPPOTrainer(object):
                     # perform validation after training
                     if self.val_reward_fn is not None:
                         val_metrics = self._validate()
-                        if self.config.actor_rollout_ref.actor.rollout.get('use_edit_for_validation', False):
+                        if self.config.actor_rollout_ref.rollout.get('use_edit_for_validation', False):
                             edit_metrics = self._validate(use_editval=True)
                             val_metrics.update(edit_metrics)
                         # longer_response_val_metrics = self._validate_longer_response()
