@@ -865,7 +865,8 @@ class RayPPOTrainer(object):
             wandb.log({"train/generations": new_table}, step=self.global_steps)
             self.train_table = new_table
         
-    def _validate(self, use_editval=False):
+    def _validate(self, use_editval=False, use_longer_response=False):
+        assert not (use_editval and use_longer_response), "use_editval and use_longer_response cannot be both True"
         reward_tensor_lst = []
         data_source_lst = []
 
@@ -904,6 +905,7 @@ class RayPPOTrainer(object):
                 'do_sample': False,
                 'validate': True,
                 "use_edit_for_validation": use_editval,
+                "use_longer_response": use_longer_response,
             }
 
             # pad to be divisible by dp_size
@@ -947,6 +949,8 @@ class RayPPOTrainer(object):
         for data_source, rewards in data_source_reward.items():
             if use_editval:
                 metric_dict[f'val_editval/test_score/{data_source}'] = np.mean(rewards)
+            elif use_longer_response:
+                metric_dict[f'val_longer_response/test_score/{data_source}'] = np.mean(rewards)
             else:
                 metric_dict[f'val/test_score/{data_source}'] = np.mean(rewards)
 
@@ -1224,6 +1228,9 @@ class RayPPOTrainer(object):
             if self.config.actor_rollout_ref.rollout.get('use_edit_for_validation', False):
                 edit_metrics = self._validate(use_editval=True)
                 val_metrics.update(edit_metrics)
+            if self.config.actor_rollout_ref.rollout.get('use_longer_response_for_validation', False):
+                longer_response_metrics = self._validate(use_longer_response=True)
+                val_metrics.update(longer_response_metrics)
             pprint(f'Initial validation metrics: {val_metrics}')
             logger.log(data=val_metrics, step=self.global_steps)
             # longer_response_val_metrics = self._validate_longer_response()
@@ -1403,6 +1410,9 @@ class RayPPOTrainer(object):
                             if self.config.actor_rollout_ref.rollout.get('use_edit_for_validation', False):
                                 edit_metrics = self._validate(use_editval=True)
                                 val_metrics.update(edit_metrics)
+                            if self.config.actor_rollout_ref.rollout.get('use_longer_response_for_validation', False):
+                                longer_response_val_metrics = self._validate(use_longer_response=True)
+                                val_metrics.update(longer_response_val_metrics)
                             # longer_response_val_metrics = self._validate_longer_response()
                         metrics.update(val_metrics)
                         # metrics.update(longer_response_val_metrics)
@@ -1460,6 +1470,9 @@ class RayPPOTrainer(object):
                         if self.config.actor_rollout_ref.rollout.get('use_edit_for_validation', False):
                             edit_metrics = self._validate(use_editval=True)
                             val_metrics.update(edit_metrics)
+                        if self.config.actor_rollout_ref.rollout.get('use_longer_response_for_validation', False):
+                            longer_response_val_metrics = self._validate(use_longer_response=True)
+                            val_metrics.update(longer_response_val_metrics)
                         # longer_response_val_metrics = self._validate_longer_response()
                         metrics.update(val_metrics)
                         # metrics.update(longer_response_val_metrics)
