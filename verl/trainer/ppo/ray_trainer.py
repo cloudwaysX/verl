@@ -865,7 +865,7 @@ class RayPPOTrainer(object):
             wandb.log({"train/generations": new_table}, step=self.global_steps)
             self.train_table = new_table
         
-    def _validate(self):
+    def _validate(self, use_editval=False):
         reward_tensor_lst = []
         data_source_lst = []
 
@@ -903,6 +903,7 @@ class RayPPOTrainer(object):
                 'recompute_log_prob': False,
                 'do_sample': False,
                 'validate': True,
+                "use_edit_for_validation": use_editval,
             }
 
             # pad to be divisible by dp_size
@@ -944,91 +945,10 @@ class RayPPOTrainer(object):
 
         metric_dict = {}
         for data_source, rewards in data_source_reward.items():
-            metric_dict[f'val/test_score/{data_source}'] = np.mean(rewards)
-
-        return metric_dict
-    
-    def _validate_longer_response(self):
-        reward_tensor_lst = []
-        data_source_lst = []
-
-        # Lists to collect samples for the table
-        sample_inputs = []
-        sample_outputs = []
-        sample_scores = []
-
-        for test_data in self.val_dataloader:
-            test_batch = DataProto.from_single_dict(test_data)
-
-            # we only do validation on rule-based rm
-            if self.config.reward_model.enable and test_batch[0].non_tensor_batch['reward_model']['style'] == 'model':
-                return {}
-
-            # Store original inputs
-            input_ids = test_batch.batch['input_ids']
-            input_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in input_ids]
-            sample_inputs.extend(input_texts)
-
-            if 'multi_modal_inputs' in test_batch.non_tensor_batch.keys():
-                test_gen_batch = test_batch.pop(
-                    batch_keys=['input_ids', 'attention_mask', 'position_ids'],
-                    non_tensor_batch_keys=['raw_prompt_ids', 'multi_modal_data', 'multi_modal_inputs'],
-                )
+            if use_editval:
+                metric_dict[f'val_editval/test_score/{data_source}'] = np.mean(rewards)
             else:
-                test_gen_batch = test_batch.pop(
-                    batch_keys=['input_ids', 'attention_mask', 'position_ids'],
-                    non_tensor_batch_keys=['raw_prompt_ids'],
-                )
-
-            test_gen_batch.meta_info = {
-                'eos_token_id': self.tokenizer.eos_token_id,
-                'pad_token_id': self.tokenizer.pad_token_id,
-                'recompute_log_prob': False,
-                'do_sample': False,
-                'validate': True,
-                'longer_response': True,
-            }
-
-            # pad to be divisible by dp_size
-            test_gen_batch_padded, pad_size = pad_dataproto_to_divisor(test_gen_batch, self.actor_rollout_wg.world_size)
-            test_output_gen_batch_padded = self.actor_rollout_wg.generate_sequences(test_gen_batch_padded)
-            # unpad
-            test_output_gen_batch = unpad_dataproto(test_output_gen_batch_padded, pad_size=pad_size)
-            print('Test longer response validation generation end')
-
-            # Store generated outputs
-            output_ids = test_output_gen_batch.batch['responses'] if 'edit_responses' not in test_output_gen_batch.batch.keys() else test_output_gen_batch.batch['edit_responses']
-            output_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in output_ids]
-            sample_outputs.extend(output_texts)
-
-            test_batch = test_batch.union(test_output_gen_batch)
-
-            # evaluate using reward_function
-            reward_tensor = self.val_reward_fn(test_batch)
-
-            # Store scores
-            scores = reward_tensor.sum(-1).cpu().tolist()
-            sample_scores.extend(scores)
-
-            reward_tensor_lst.append(reward_tensor)
-            data_source_lst.append(test_batch.non_tensor_batch.get('data_source', ['unknown'] * reward_tensor.shape[0]))
-
-        self._maybe_log_val_generations_to_wandb(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
-
-        reward_tensor = torch.cat(reward_tensor_lst, dim=0).sum(-1).cpu()  # (batch_size,)
-        data_sources = np.concatenate(data_source_lst, axis=0)
-
-        # evaluate test_score based on data source
-        data_source_reward = {}
-        for i in range(reward_tensor.shape[0]):
-            data_source = data_sources[i]
-            if data_source not in data_source_reward:
-                data_source_reward[data_source] = []
-            data_source_reward[data_source].append(reward_tensor[i].item())
-
-        metric_dict = {}
-        for data_source, rewards in data_source_reward.items():
-            metric_dict[f'val_doubleresponse/test_score/{data_source}'] = np.mean(rewards)
+                metric_dict[f'val/test_score/{data_source}'] = np.mean(rewards)
 
         return metric_dict
     
@@ -1301,6 +1221,9 @@ class RayPPOTrainer(object):
         # currently, we only support validation using the reward_function.
         if self.val_reward_fn is not None and self.config.trainer.get('val_before_train', True):
             val_metrics = self._validate()
+            if self.config.actor_rollout_ref.actor.rollout.get('use_edit_for_validation', False):
+                edit_metrics = self._validate(use_editval=True)
+                val_metrics.update(edit_metrics)
             pprint(f'Initial validation metrics: {val_metrics}')
             logger.log(data=val_metrics, step=self.global_steps)
             # longer_response_val_metrics = self._validate_longer_response()
@@ -1477,6 +1400,9 @@ class RayPPOTrainer(object):
                         self.global_steps % self.config.trainer.test_freq == 0:
                         with _timer('testing', timing_raw):
                             val_metrics: dict = self._validate()
+                            if self.config.actor_rollout_ref.actor.rollout.get('use_edit_for_validation', False):
+                                edit_metrics = self._validate(use_editval=True)
+                                val_metrics.update(edit_metrics)
                             # longer_response_val_metrics = self._validate_longer_response()
                         metrics.update(val_metrics)
                         # metrics.update(longer_response_val_metrics)
@@ -1531,6 +1457,9 @@ class RayPPOTrainer(object):
                     # perform validation after training
                     if self.val_reward_fn is not None:
                         val_metrics = self._validate()
+                        if self.config.actor_rollout_ref.actor.rollout.get('use_edit_for_validation', False):
+                            edit_metrics = self._validate(use_editval=True)
+                            val_metrics.update(edit_metrics)
                         # longer_response_val_metrics = self._validate_longer_response()
                         metrics.update(val_metrics)
                         # metrics.update(longer_response_val_metrics)
