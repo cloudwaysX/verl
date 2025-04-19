@@ -407,20 +407,20 @@ class vLLMRollout(BaseRollout):
             edit_position_ids = torch.cat([position_ids, edit_response_position_ids], dim=-1)
             
             
-            if self.config.force_append_answers == "edit":
-                batch.update({
-                    'edit_responses': edit_response,
-                    'edit_attention_mask': edit_attention_mask,
-                    'edit_input_ids': edit_sequence,
-                    'edit_position_ids': edit_position_ids,
-                })
-            elif self.config.force_append_answers == "overwrite":
+            if self.config.force_append_answers == "overwrite" or prompts.meta_info.get('validate', False):
                 batch.update({
                     'responses': edit_response,
                     'attention_mask': edit_attention_mask,
                     'input_ids': edit_sequence,
                     'position_ids': edit_position_ids,
                     "logprob_mask": logprob_mask,
+                })
+            elif self.config.force_append_answers == "edit":
+                batch.update({
+                    'edit_responses': edit_response,
+                    'edit_attention_mask': edit_attention_mask,
+                    'edit_input_ids': edit_sequence,
+                    'edit_position_ids': edit_position_ids,
                 })
             else:
                 raise ValueError(
