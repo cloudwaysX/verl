@@ -5,19 +5,32 @@ set -x
 # vLLM without XFORMERS will results in CUDA errors.
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --model)
+            MODEL_PATH="$2"
+            shift 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
 # Set default model path if not provided
+if [ -z "$MODEL_PATH" ]; then
+    MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+fi
 
-MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
-
-PROJECT_NAME='deepscaler_4k_v2'
-EXPERIMENT_NAME='v2_deepscaler-1.5b-2k_editval' 
+PROJECT_NAME='math'
+EXPERIMENT_NAME='math-s-1.5b-2k_freezemlp40perc' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_ratio=0.1 \
-    +data.train_ratio_seed=42 \
-    data.train_files=$HOME/data/deepscaler/train.parquet \
+    data.train_ratio=0.125 \
+    data.train_files=$HOME/data/math/train.parquet \
     data.val_files=[$HOME/data/aime/test.parquet,$HOME/data/amc/test.parquet,$HOME/data/math/test.parquet,$HOME/data/minerva/test.parquet] \
     data.train_batch_size=128 \
     data.val_batch_size=512 \
@@ -33,7 +46,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
-    actor_rollout_ref.actor.clip_ratio=0.2 \
+    +actor_rollout_ref.actor.freeze_mlp=0.4 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     +actor_rollout_ref.actor.fsdp_config.grad_offload=False \
@@ -45,10 +58,6 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
     actor_rollout_ref.rollout.n=8 \
     +actor_rollout_ref.rollout.n_val=8 \
-    +actor_rollout_ref.rollout.use_edit_for_validation=True \
-    +actor_rollout_ref.rollout.use_longer_response_for_validation=True \
-    actor_rollout_ref.rollout.force_append_answers=null \
-    +actor_rollout_ref.rollout.forceans_for_untruncated=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=8192 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.kl_ctrl.kl_coef=0.001 \
@@ -60,11 +69,9 @@ python3 -m verl.trainer.main_ppo \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=100 \
-    trainer.test_freq=10 \
+    trainer.test_freq=20 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
-    trainer.total_epochs=10 "${@:1}"\
+    trainer.total_epochs=30 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
-    reward_model.edit_weight=0.0 \
-    active_strategy.selection_metric=null \
-    active_strategy.strategy_type=null
+    active_strategy.strategy_type=null 

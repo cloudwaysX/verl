@@ -9,13 +9,13 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 
-PROJECT_NAME='deepscaler_1k'
-EXPERIMENT_NAME='deepscaler-1.5b-2k_shufflefixordergreedytop50_clipratioANDvar' 
+PROJECT_NAME='deepscaler_4k_v2'
+EXPERIMENT_NAME='v3_deepscaler-1.5b-2k_fixordergreedy_clipratio0.5ANDvar' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_ratio=0.025 \
+    data.train_ratio=0.1 \
     +data.train_ratio_seed=42 \
     data.train_files=$HOME/data/deepscaler/train.parquet \
     data.val_files=[$HOME/data/aime/test.parquet,$HOME/data/amc/test.parquet,$HOME/data/math/test.parquet,$HOME/data/minerva/test.parquet] \
@@ -44,7 +44,9 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
     actor_rollout_ref.rollout.n=8 \
     +actor_rollout_ref.rollout.n_val=8 \
-    actor_rollout_ref.rollout.force_append_answers=False \
+    +actor_rollout_ref.rollout.use_edit_for_validation=True \
+    +actor_rollout_ref.rollout.use_longer_response_for_validation=True \
+    actor_rollout_ref.rollout.force_append_answers=null \
     actor_rollout_ref.rollout.max_num_batched_tokens=8192 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.kl_ctrl.kl_coef=0.001 \
@@ -55,7 +57,7 @@ python3 -m verl.trainer.main_ppo \
     +trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
-    trainer.save_freq=100 \
+    trainer.save_freq=80 \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
@@ -64,6 +66,7 @@ python3 -m verl.trainer.main_ppo \
     active_strategy.selection_metric="clipratio_and_variance" \
     active_strategy.strategy_type="fixordergreedy" \
     active_strategy.greedy_exploration_ratio=0.0\
-    +active_strategy.shufflefixorder=True \
+    +active_strategy.shufflefixorder=False \
     active_strategy.greedy_top_percent=0 \
-    +active_strategy.size_threshold=0.5
+    +active_strategy.size_threshold=0 \
+    +active_strategy.score_threshold=0.5 
