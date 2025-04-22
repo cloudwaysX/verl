@@ -887,6 +887,16 @@ class RayPPOTrainer(object):
             input_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in input_ids]
             sample_inputs.extend(input_texts)
 
+
+            do_sample = self.config.actor_rollout_ref.rollout.get("do_sample", False)
+            n_val = self.config.actor_rollout_ref.rollout.get("n_val", 1)
+            val_temperature = self.config.actor_rollout_ref.rollout.get("val_temperature", 0.0)
+            if not do_sample:
+                assert n_val == 1, "n_val must be 1 if do_sample is True"
+                assert val_temperature == 0, "val_temperature must be 0 if do_sample is False"
+            if n_val > 1:
+                test_batch = test_batch.repeat(repeat_times=n_val, interleave=True)
+
             if 'multi_modal_inputs' in test_batch.non_tensor_batch.keys():
                 test_gen_batch = test_batch.pop(
                     batch_keys=['input_ids', 'attention_mask', 'position_ids'],
@@ -897,12 +907,13 @@ class RayPPOTrainer(object):
                     batch_keys=['input_ids', 'attention_mask', 'position_ids'],
                     non_tensor_batch_keys=['raw_prompt_ids'],
                 )
-
+                
             test_gen_batch.meta_info = {
                 'eos_token_id': self.tokenizer.eos_token_id,
                 'pad_token_id': self.tokenizer.pad_token_id,
                 'recompute_log_prob': False,
-                'do_sample': False,
+                'do_sample': do_sample,
+                "temperature": val_temperature,
                 'validate': True,
                 "use_edit_for_validation": use_editval,
                 "use_longer_response": use_longer_response,

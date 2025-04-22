@@ -234,6 +234,15 @@ class vLLMRollout(BaseRollout):
                 'temperature': 0,
                 'n': 1  # if greedy, only 1 response
             }
+        else:
+            kwargs = {
+                'best_of': 1,
+                'top_p': 1.0,
+                'top_k': -1,
+                'min_p': 0.0,
+                'temperature': prompts.meta_info.get('temperature', 0.6),
+                'n': 1  
+            }
             
         # TODO(yifangc): add longer response support
         if prompts.meta_info.get('use_longer_response', False):
