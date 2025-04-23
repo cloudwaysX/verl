@@ -640,19 +640,23 @@ class RayPPOTrainer(object):
             if self.config.active_strategy.strategy_type == "fixorderdynamic":
                 assert self.config.active_strategy.selection_metric == "reward", \
                     "Only reward is supported for fixorderdynamic"
-            if self.config.active_strategy.selection_metric == "variance":
-                score_threshold = None
-            elif self.config.active_strategy.selection_metric == "clipratio_and_variance":
-                score_threshold = [0.5, 1.0] #0.0*10 + 0.5 
-            elif self.config.active_strategy.selection_metric == "reward":
-                score_threshold = [0.74, 1.0]
+            if self.config.active_strategy.score_threshold is not None:
+                score_threshold = self.config.active_strategy.score_threshold
             else:
-                score_threshold = None
-            if self.config.active_strategy.get("size_threshold", None):
-                score_threshold = None # Override the score_threshold
-                size_threshold = self.config.active_strategy.size_threshold
-            else:
-                size_threshold = None
+                # Default score_threshold
+                if self.config.active_strategy.selection_metric == "variance":
+                    score_threshold = None
+                elif self.config.active_strategy.selection_metric == "clipratio_and_variance":
+                    score_threshold = [0.5, 1.0] #0.0*10 + 0.5 
+                elif self.config.active_strategy.selection_metric == "reward":
+                    score_threshold = [0.74, 1.0]
+                else:
+                    score_threshold = None
+                if self.config.active_strategy.get("size_threshold", None):
+                    score_threshold = None # Override the score_threshold
+                    size_threshold = self.config.active_strategy.size_threshold
+                else:
+                    size_threshold = None
                 
             
             assert not self.config.active_strategy.get("shufflefixorder", False), \
