@@ -86,20 +86,21 @@ class ScoreOrderedSampler(Sampler):
             if self.size_threshold is not None:
                 sorted_indices = sorted_indices[:int(self.size_threshold*len(sorted_indices))]
             return sorted_indices
-        else:
-            assert 0<=self.score_threshold[0]<self.score_threshold[1]<=1.0, "score_threshold must be a valid range"
 
         # Find the split point (first index below threshold)
         # And indices included in [split_idx[0], split_idx[1]) are being selected
         split_idx = [0, len(sorted_scores)]
         upper_bound = self.score_threshold[1]
         lower_bound = self.score_threshold[0]
+        print("DEBUG",split_idx)
         for i, score in enumerate(sorted_scores):
             if self.descending:
                 if score > upper_bound:
                     split_idx[0] = i+1
                 elif score <= lower_bound:
-                    split_idx[1] = i+1
+                    split_idx[1] = i
+                    print("DEBUG lower bound", lower_bound, self._iter_count)
+                    print("DEBUG2",split_idx)
                     break
             else:
                 raise NotImplementedError("Ascending order not implemented yet.")
