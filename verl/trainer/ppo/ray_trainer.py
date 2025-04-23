@@ -652,11 +652,11 @@ class RayPPOTrainer(object):
                     score_threshold = [0.74, 1.0]
                 else:
                     score_threshold = None
-                if self.config.active_strategy.get("size_threshold", None):
-                    score_threshold = None # Override the score_threshold
-                    size_threshold = self.config.active_strategy.size_threshold
-                else:
-                    size_threshold = None
+            if self.config.active_strategy.get("size_threshold", None):
+                score_threshold = None # Override the score_threshold
+                size_threshold = self.config.active_strategy.size_threshold
+            else:
+                size_threshold = None
                 
             
             assert not self.config.active_strategy.get("shufflefixorder", False), \
