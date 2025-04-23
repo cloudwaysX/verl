@@ -602,7 +602,7 @@ class RayPPOTrainer(object):
             if metric_type == "variance":
                 return self.prev_variances[idx]
             elif metric_type == "reward":
-                return -self.latest_reward_mean[idx]
+                return self.latest_reward_mean[idx]
             elif metric_type == "variance_and_clipratio":
                 return (
                     self.prev_variances[idx]
@@ -617,16 +617,6 @@ class RayPPOTrainer(object):
                 return (
                     self.prev_variances[idx] * 10
                     - self.latest_reward_mean[idx]
-                )
-            elif metric_type == "highreward_and_clipratio_1":
-                return (
-                    self.latest_reward_mean[idx]
-                    + self.latest_clippedans_mean[idx] * 10
-                )
-            elif metric_type == "lowreward_and_clipratio_2":
-                return (
-                    -self.latest_reward_mean[idx]
-                    + self.latest_clippedans_mean[idx] * 10
                 )
             else:
                 raise ValueError(
@@ -644,16 +634,21 @@ class RayPPOTrainer(object):
                 greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio
             )
             print("len of greedy_sampler", len(self.sampler))
-        elif self.config.active_strategy.strategy_type == "fixordergreedy":
+        elif self.config.active_strategy.strategy_type in ["fixordergreedy", "fixorderdynamic"]:
             assert self.config.active_strategy.greedy_top_percent == 0.0, \
                 "greedy_top_percent > 0 is not supported for greedy_fixedorder"
+            if self.config.active_strategy.strategy_type == "fixorderdynamic":
+                assert self.config.active_strategy.selection_metric == "reward", \
+                    "Only reward is supported for fixorderdynamic"
             if self.config.active_strategy.selection_metric == "variance":
-                score_threshold = 0.0
+                score_threshold = None
             elif self.config.active_strategy.selection_metric == "clipratio_and_variance":
-                score_threshold = 0.5 #0.0*10 + 0.5 
+                score_threshold = [0.5, 1.0] #0.0*10 + 0.5 
+            elif self.config.active_strategy.selection_metric == "reward":
+                score_threshold = [0.74, 1.0]
             else:
                 score_threshold = None
-            if self.config.active_strategy.get("size_threshold",None):
+            if self.config.active_strategy.get("size_threshold", None):
                 score_threshold = None # Override the score_threshold
                 size_threshold = self.config.active_strategy.size_threshold
             else:
@@ -670,6 +665,9 @@ class RayPPOTrainer(object):
                 size_threshold=size_threshold,
                 greedy_exploration_ratio=self.config.active_strategy.greedy_exploration_ratio,
                 descending=True,
+                resume=self.config.active_strategy.get("resume_sampler", False), # TODO: can be more automatic
+                dynamic_threshold=self.config.active_strategy.strategy_type == "fixorderdynamic",
+                dynamaic_threshold_params=self.config.active_strategy.get("dynamaic_threshold_params", None)
             )
         else:
             self.sampler = base_sampler

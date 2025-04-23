@@ -18,6 +18,7 @@ active_strategy:
   greedy_exploration_ratio: 0.0
   greedy_top_percent: 0.0
   selection_metric: variance
+  score_threshold: 0.0
 
 actor_rollout_ref:
   hybrid_engine: True

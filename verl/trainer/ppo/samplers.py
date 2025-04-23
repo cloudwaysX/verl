@@ -1,5 +1,6 @@
 import random
 import torch
+import numpy as np
 from torch.utils.data import Sampler, BatchSampler
 
 import torch
@@ -14,7 +15,10 @@ class ScoreOrderedSampler(Sampler):
                  size_threshold=None,
                  greedy_exploration_ratio=0.0,
                  descending=True,
-                 shuffled=False):
+                 resume=False,
+                 shuffled=False,
+                 dynamic_threshold=False,
+                 dynamaic_threshold_params=None):
         """
         A sampler that yields indices ordered by score after the first iteration.
         First iteration uses the provided base_sampler if available.
@@ -36,10 +40,26 @@ class ScoreOrderedSampler(Sampler):
         self._iter_count = -1
         self.seed = 42
         self.shuffled = shuffled
+        self.dynamic_threshold = dynamic_threshold
+        self.dynamaic_threshold_params = dynamaic_threshold_params
+        self.resume = resume
         
         print(f"ScoreOrderedSampler: score_threshold={self.score_threshold}, "
               f"greedy_exploration_ratio={self.greedy_exploration_ratio}, "
               f"descending={self.descending}")
+        
+    def _compute_threhold_dynamics(self):
+        avg_score = 0.0
+        for idx in range(self.dataset_size):
+            avg_score += self.selection_fn(idx)
+        avg_score /= self.dataset_size
+        score_gap = self.score_threshold[1] - self.score_threshold[0] #[lower_bound, upper_bound]
+        alpha = self.dynamaic_threshold_params.get("alpha",5.0)
+        eta = self.score_threshold[0]
+        # The lower bound starts from the original lower bound and decreases with the average score increasing
+        new_lower_bound = np.max(self.score_threshold[0] - eta * np.tanh(alpha * avg_score), 0.0)
+        new_upper_bound = np.min(new_lower_bound + score_gap, 1.0)
+        self.score_threshold = (new_upper_bound, new_lower_bound)
         
     def _calculate_included_indices(self):
         """Calculate which indices will be included in the current iteration."""
@@ -66,39 +86,52 @@ class ScoreOrderedSampler(Sampler):
             if self.size_threshold is not None:
                 sorted_indices = sorted_indices[:int(self.size_threshold*len(sorted_indices))]
             return sorted_indices
-            
+        else:
+            assert 0<=self.score_threshold[0]<self.score_threshold[1]<=1.0, "score_threshold must be a valid range"
+
         # Find the split point (first index below threshold)
-        split_idx = 0
+        # And indices included in [split_idx[0], split_idx[1]) are being selected
+        split_idx = [0, len(sorted_scores)]
+        upper_bound = self.score_threshold[1]
+        lower_bound = self.score_threshold[0]
         for i, score in enumerate(sorted_scores):
-            if (self.descending and score <= self.score_threshold) or \
-               (not self.descending and score >= self.score_threshold):
-                split_idx = i
-                break
+            if self.descending:
+                if score > upper_bound:
+                    split_idx[0] = i+1
+                elif score <= lower_bound:
+                    split_idx[1] = i+1
+                    break
+            else:
+                raise NotImplementedError("Ascending order not implemented yet.")
         else:
             # No indices below threshold
             return sorted_indices
         
         # Split into above and below threshold
-        above_threshold = sorted_indices[:split_idx]
-        below_threshold = sorted_indices[split_idx:]
+        within_threshold = sorted_indices[split_idx[0]:split_idx[1]]
+        outside_threshold = sorted_indices[split_idx[1]:] + sorted_indices[:split_idx[0]]
         
         # Randomly select a subset of below-threshold samples
-        explore_count = int(len(below_threshold) * self.greedy_exploration_ratio)
-        exploration_samples = random.sample(below_threshold, explore_count) if explore_count > 0 else []
+        explore_count = int(len(outside_threshold) * self.greedy_exploration_ratio)
+        exploration_samples = random.sample(outside_threshold, explore_count) if explore_count > 0 else []
         
         # Combine above-threshold and exploration samples
-        print(f"{len(above_threshold)} samples above threshold.")
-        included_indices = above_threshold + exploration_samples
+        print(f"{len(within_threshold)} samples above threshold.")
+        included_indices = within_threshold 
         
         # Re-sort the included indices by score
         idx_to_score = {idx: score for idx, score in zip(sorted_indices, sorted_scores)}
         included_indices.sort(key=lambda idx: idx_to_score[idx], reverse=self.descending)
+        # Here we do not sort the exploration samples, so they will be in random order
+        included_indices = included_indices + exploration_samples
         
         return included_indices
 
     def __iter__(self):
         self._iter_count += 1
-        if self._iter_count == 0:
+        if self.dynamic_threshold:
+            self._compute_threhold_dynamics()
+        if self._iter_count == 0 and not self.resume:
             print("First iteration: using provided base sampler")
             # For the first iteration, use the provided base sampler
             for idx in self.base_sampler:
