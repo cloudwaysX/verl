@@ -890,7 +890,7 @@ class RayPPOTrainer(object):
             sample_inputs.extend(input_texts)
 
 
-            do_sample = self.config.actor_rollout_ref.rollout.get("do_sample", False)
+            do_sample = self.config.actor_rollout_ref.rollout.get("do_sample_val", False)
             n_val = self.config.actor_rollout_ref.rollout.get("n_val", 1)
             val_temperature = self.config.actor_rollout_ref.rollout.get("val_temperature", 0.0)
             if not do_sample:
