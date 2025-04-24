@@ -8,6 +8,7 @@ adds instruction prompts, and saves the processed data as parquet files.
 import argparse
 import os
 from typing import Dict, List, Optional, Any
+from collections import Counter
 
 import pandas as pd
 from verl.utils.hdfs_io import copy, makedirs
@@ -15,13 +16,11 @@ from verl.utils.hdfs_io import copy, makedirs
 from datasets import load_dataset
 
 
-def make_map_fn(split: str, source: str = None):
+def make_map_fn(split: str,):
     """Create a mapping function to process dataset examples.
 
     Args:
         split: Dataset split name ('train' or 'test')
-        source: Source dataset name
-
     Returns:
         Function that processes individual dataset examples
     """
@@ -47,7 +46,7 @@ def make_map_fn(split: str, source: str = None):
         
         # Construct the data in the format expected by the training pipeline
         data = {
-            "data_source": source or "OpenR1-Math-220k",
+            "data_source": "OpenR1-Math-220k",
             "prompt": [{
                 "role": "user",
                 "content": question
@@ -68,6 +67,60 @@ def make_map_fn(split: str, source: str = None):
     return process_fn
 
 
+def print_dataset_info(dataset, name="Dataset"):
+    """Print information about the dataset."""
+    print(f"\n{name} Information:")
+    print(f"Number of examples: {len(dataset)}")
+    
+    # Get all field names
+    if len(dataset) > 0:
+        example = dataset[0]
+        print(f"Fields: {list(example.keys())}")
+    
+    # Print dataset statistics
+    if 'problem_type' in example:
+        problem_types = Counter([item.get('problem_type', 'unknown') for item in dataset])
+        print("\nProblem Type Distribution:")
+        for problem_type, count in problem_types.most_common():
+            print(f"  {problem_type}: {count} ({count/len(dataset)*100:.2f}%)")
+    
+    if 'correctness_count' in example:
+        correctness_counts = Counter([item.get('correctness_count', 0) for item in dataset])
+        print("\nCorrectness Count Distribution:")
+        for count, freq in sorted(correctness_counts.items()):
+            print(f"  {count}: {freq} examples ({freq/len(dataset)*100:.2f}%)")
+            
+    # Calculate difficulty distribution
+    if 'difficulty' in example['extra_info']:
+        difficulties = Counter([item['extra_info']['difficulty'] for item in dataset])
+        print("\nDifficulty Distribution:")
+        for difficulty, count in sorted(difficulties.items()):
+            print(f"  {difficulty}: {count} ({count/len(dataset)*100:.2f}%)")
+
+def print_examples(dataset, num_examples=3):
+    """Print example problems from the processed dataset."""
+    print(f"\nExample Problems (showing {min(num_examples, len(dataset))} examples):")
+    
+    for i in range(min(num_examples, len(dataset))):
+        example = dataset[i]
+        print(f"\nExample #{i+1}:")
+        
+        # Print prompt
+        prompt = example["prompt"][0]["content"]
+        # Truncate if too long
+        if len(prompt) > 300:
+            prompt = prompt[:297] + "..."
+        print(f"Prompt: {prompt}")
+        
+        # Print ability and ground truth answer
+        print(f"Ability: {example['ability']}")
+        print(f"Ground Truth: {example['reward_model']['ground_truth']}")
+        
+        # Print difficulty
+        print(f"Difficulty: {example['extra_info']['difficulty']}")
+        
+        print("-" * 80)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process OpenR1-Math-220k dataset for training')
     parser.add_argument(
@@ -84,22 +137,24 @@ if __name__ == '__main__':
     
     # Make local directory if it doesn't exist
     makedirs(local_dir, exist_ok=True)
-    
-    print(f"Loading dataset from {args.dataset_path}...")
-    
-from datasets import load_dataset
+
+    print(f"Loading dataset from bethgelab/CuratedThoughts...")
 
     # Login using e.g. `huggingface-cli login` to access this dataset
-    ds = load_dataset("bethgelab/CuratedThoughts", "OpenR1-Math-220k-default", split="train")
+    train_dataset = load_dataset("bethgelab/CuratedThoughts", "OpenR1-Math-220k-default", split="train")
     
     print(f"Train dataset size: {len(train_dataset)}")
     # Process training data
     train_data: List[Dict[str, Any]] = []
-    process_fn = make_map_fn('train', args.dataset_path)
+    process_fn = make_map_fn('train')
     for idx, example in enumerate(train_dataset):
         processed_example = process_fn(example, idx)
         if processed_example is not None:
             train_data.append(processed_example)
+
+    # Print train dataset info and examples
+    print_dataset_info(train_data, "Processed Train Data")
+    print_examples(train_data, 3)
 
     # Save training dataset
     print(f"Processed train data size: {len(train_data)}")
