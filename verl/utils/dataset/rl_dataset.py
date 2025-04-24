@@ -26,46 +26,10 @@ from transformers import PreTrainedTokenizer, ProcessorMixin
 
 from verl.utils.model import compute_position_id_with_mask
 import verl.utils.torch_functional as verl_F
+from verl.trainer.ppo.preselect import selection_for_math_difficulty, selection_for_mathamc_difficulty
+from verl.trainer.ppo.preselect import selection_for_deepscaler_difficulty
+from verl.trainer.ppo.preselect import selection_for_openthoughts_difficulty, balance_dataset_by_ability
 
-def selection_for_math_difficulty(dataframe, lower_bound=3, upper_bound=5):
-    assert "difficulty" in dataframe["extra_info"][0], "difficulty is not in the extra_info"
-    assert "ability" in dataframe, "ability is not in the data frame"
-    # Select the rows with difficulty between the lower and upper bounds
-    selected_rows = dataframe.apply(
-        lambda x: (not x["ability"].startswith("math")) or (lower_bound<=x["extra_info"]["difficulty"] <=upper_bound),
-        axis=1)
-    return dataframe[selected_rows]
-
-def selection_for_mathamc_difficulty(dataframe, lower_bound=3, upper_bound=5):
-    assert "difficulty" in dataframe["extra_info"][0], "difficulty is not in the extra_info"
-    assert "ability" in dataframe, "ability is not in the data frame"
-    # Select the rows with difficulty between the lower and upper bounds
-    selected_rows1 = dataframe.apply(
-        lambda x: (x["ability"].startswith("math")) and (lower_bound<=x["extra_info"]["difficulty"] <=upper_bound),
-        axis=1)
-    selected_rows2 = dataframe.apply(
-        lambda x: (x["ability"].startswith("amc")) and (x["extra_info"]["difficulty"] >= 2),
-        axis=1)
-    selected_rows = selected_rows1 | selected_rows2
-    return dataframe[selected_rows]
-
-def selection_for_deepscaler_difficulty(dataframe, lower_bound=3, upper_bound=8):
-    assert "difficulty" in dataframe["extra_info"][0], "difficulty is not in the extra_info"
-    assert "ability" in dataframe, "ability is not in the data frame"
-    # Select the rows with difficulty between the lower and upper bounds
-    selected_rows = dataframe.apply(
-        lambda x: (x["extra_info"]["difficulty"] is None) or (lower_bound<=x["extra_info"]["difficulty"] <=upper_bound),
-        axis=1)
-    return dataframe[selected_rows]
-
-def selection_for_deepscaler_difficulty38(dataframe, lower_bound=3, upper_bound=8):
-    return selection_for_deepscaler_difficulty(dataframe, lower_bound, upper_bound)
-
-def selection_for_deepscaler_difficulty37(dataframe, lower_bound=3, upper_bound=7):
-    return selection_for_deepscaler_difficulty(dataframe, lower_bound, upper_bound)
-
-def selection_for_deepscaler_difficulty26(dataframe, lower_bound=2, upper_bound=6):
-    return selection_for_deepscaler_difficulty(dataframe, lower_bound, upper_bound)
 
 def collate_fn(data_list: list[dict]) -> dict:
     tensors = defaultdict(list)
@@ -178,23 +142,28 @@ class RLHFDataset(Dataset):
         self.dataframe = self.dataframe[self.dataframe.apply(lambda doc: len(
             tokenizer.apply_chat_template(doc[prompt_key], add_generation_prompt=True)) <= self.max_prompt_length,
                                                              axis=1)]
-        if train_ratio<1:
+        if train_ratio < 1:
             size = int(len(self.dataframe)*train_ratio)
-            if train_ratio_seed is not None:
+            if preselect in ["balance_by_ability"]:
+                self.dataframe = balance_dataset_by_ability(self.dataframe, size, train_ratio_seed)
+            elif train_ratio_seed is not None:
                 np.random.seed(train_ratio_seed)
                 self.dataframe = self.dataframe.sample(frac=1, random_state=train_ratio_seed).reset_index(drop=True)
             self.dataframe = self.dataframe.head(size)
+        elif preselect in ["balance_by_ability"]:
+            raise ValueError(f"Preselect {preselect} is not compatible with train_ratio = 1")
+            
         if preselect is not None:
             if preselect in ['math_difficulty']:
                 self.dataframe = selection_for_math_difficulty(self.dataframe)
             elif preselect in ["mathamc_difficulty"]:
                 self.dataframe = selection_for_mathamc_difficulty(self.dataframe)
             elif preselect in ["deepscaler_difficulty38"]:
-                self.dataframe = selection_for_deepscaler_difficulty38(self.dataframe)
-            elif preselect in ["deepscaler_difficulty37"]:
-                self.dataframe = selection_for_deepscaler_difficulty37(self.dataframe)
-            elif preselect in ["deepscaler_difficulty26"]:
-                self.dataframe = selection_for_deepscaler_difficulty26(self.dataframe)
+                self.dataframe = selection_for_deepscaler_difficulty(self.dataframe)
+            elif preselect in ["openthoughts_difficulty4"]:
+                self.dataframe = selection_for_openthoughts_difficulty(self.dataframe)
+            elif preselect in ["balance_by_ability"]:
+                pass # Already done above
             else:
                 raise ValueError(f"No preselect method {preselect} found")
         print(f"The len of final dataset is {len(self.dataframe)}")
