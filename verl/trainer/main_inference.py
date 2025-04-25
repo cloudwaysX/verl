@@ -85,7 +85,9 @@ def main(config):
     # Convert list format to simple text if needed
     chat_lst = []
     for prompt in prompts_list:
-        if isinstance(prompt, list):
+        if hasattr(prompt, '__iter__') and not isinstance(prompt, str):
+            # Convert to a list for consistent handling
+            prompt_list = list(prompt)
             # Process chat format
             if len(prompt) > 0 and isinstance(prompt[0], dict) and 'content' in prompt[0]:
                 chat_lst.append(prompt[0]['content'])
