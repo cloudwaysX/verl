@@ -13,16 +13,22 @@ import pandas as pd
 
 @ray.remote(num_gpus=1)
 def process_batch(model_path, batch_texts, max_length, pooling_method, normalize):
-    # Dynamically get the GPU assigned by Ray
-    gpu_ids = ray.get_gpu_ids()
-    assert len(gpu_ids) == 1, f"Expected 1 GPU per worker, got: {gpu_ids}"
-    gpu_id = gpu_ids[0]
-    device = f"cuda:{gpu_id}"
+    # Dynamically obtain and use the GPU assigned by Ray
+    import ray as _ray
+    import os as _os
+    import torch as _torch
+    import numpy as _np
+    from transformers import AutoTokenizer as _AutoTokenizer, AutoModel as _AutoModel
 
-    print(f"Ray assigned GPU id: {gpu_id}, device: {device}")
+    gpu_ids = _ray.get_gpu_ids()
+    assert len(gpu_ids) == 1, f"Expected exactly one GPU per worker, got: {gpu_ids}"
+    # Restrict this process to the assigned GPU
+    _os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_ids[0])
+    device = _torch.device("cuda:0")
+    print(f"Ray assigned GPU id: {gpu_ids[0]}, using device: {device}")
 
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-    model = AutoModel.from_pretrained(model_path)
+    tokenizer = _AutoTokenizer.from_pretrained(model_path)
+    model = _AutoModel.from_pretrained(model_path)
     model.to(device)
     model.eval()
 
@@ -34,21 +40,22 @@ def process_batch(model_path, batch_texts, max_length, pooling_method, normalize
         return_tensors='pt'
     ).to(device)
 
-    with torch.no_grad():
+    with _torch.no_grad():
         model_output = model(**encoded_input)
 
     if pooling_method == 'cls':
         batch_embeddings = model_output.last_hidden_state[:, 0, :].cpu().numpy()
     elif pooling_method == 'mean':
         token_embeddings = model_output[0]
-        input_mask_expanded = encoded_input["attention_mask"].unsqueeze(-1).expand(token_embeddings.size()).float()
-        batch_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-        batch_embeddings = batch_embeddings.cpu().numpy()
+        mask = encoded_input['attention_mask'].unsqueeze(-1).expand(token_embeddings.size()).float()
+        summed = _torch.sum(token_embeddings * mask, dim=1)
+        counts = _torch.clamp(mask.sum(dim=1), min=1e-9)
+        batch_embeddings = (summed / counts).cpu().numpy()
     else:
         raise NotImplementedError(f"Pooling method {pooling_method} not implemented.")
 
     if normalize:
-        batch_embeddings /= np.linalg.norm(batch_embeddings, axis=1, keepdims=True)
+        batch_embeddings = batch_embeddings / _np.linalg.norm(batch_embeddings, axis=1, keepdims=True)
 
     return batch_embeddings
 
@@ -59,14 +66,15 @@ def main(config):
     pprint(OmegaConf.to_container(config, resolve=True))
     OmegaConf.resolve(config)
 
+    # Ensure driver sees all GPUs
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(config.embedding.n_gpus_per_node))
-
     if not ray.is_initialized():
         ray.init()
 
     model_name = config.embedding.model.name
     model_path = copy_to_local(model_name)
 
+    # Load and optionally sample dataset
     dataset = pd.read_parquet(config.data.path)
     if config.data.train_ratio < 1:
         size = int(len(dataset) * config.data.train_ratio)
@@ -75,21 +83,17 @@ def main(config):
             dataset = dataset.sample(frac=1, random_state=config.data.train_ratio_seed).reset_index(drop=True)
         dataset = dataset.head(size)
 
-    prompts_list = dataset[config.data.prompt_key].tolist()
-
-    chat_lst = []
-    for prompt in prompts_list:
+    texts = []
+    for prompt in dataset[config.data.prompt_key].tolist():
         if hasattr(prompt, '__iter__') and not isinstance(prompt, str):
-            prompt_list = list(prompt)
-            if len(prompt) > 0 and isinstance(prompt[0], dict) and 'content' in prompt[0]:
-                chat_lst.append(prompt[0]['content'])
-            else:
-                chat_lst.append(str(prompt[0]) if len(prompt) > 0 else "")
+            first = prompt[0]
+            texts.append(first['content'] if isinstance(first, dict) and 'content' in first else str(first))
         else:
-            chat_lst.append(prompt)
+            texts.append(prompt)
 
+    # Batch and distribute
     batch_size = config.embedding.batch_size
-    batches = [chat_lst[i:i + batch_size] for i in range(0, len(chat_lst), batch_size)]
+    batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
 
     futures = [
         process_batch.remote(
@@ -102,25 +106,23 @@ def main(config):
         for batch in batches
     ]
 
+    # Collect results
     embeddings = []
-    total_samples = len(chat_lst)
-
-    with tqdm(total=total_samples) as pbar:
-        for batch, future in zip(batches, futures):
-            batch_embeddings = ray.get(future)
-            embeddings.extend(batch_embeddings)
+    total = len(texts)
+    with tqdm(total=total) as pbar:
+        for batch, fut in zip(batches, futures):
+            out = ray.get(fut)
+            embeddings.extend(out)
             pbar.update(len(batch))
 
     embeddings = np.array(embeddings)
 
-    output_dir = config.embedding.output_path
-    makedirs(output_dir, exist_ok=True)
-
-    embedding_file = os.path.join(output_dir, "embeddings.npy")
-    print(f"Saving embeddings to {embedding_file}")
+    # Save
+    makedirs(config.embedding.output_path, exist_ok=True)
+    out_file = os.path.join(config.embedding.output_path, 'embeddings.npy')
+    print(f"Saving embeddings to {out_file}")
     print(f"Embedding shape: {embeddings.shape}")
-    np.save(embedding_file, embeddings)
-
+    np.save(out_file, embeddings)
     print("Done!")
 
 if __name__ == '__main__':
