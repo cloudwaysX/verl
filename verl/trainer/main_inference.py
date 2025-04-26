@@ -109,9 +109,9 @@ def main(config):
     # Collect results
     embeddings = []
     total = len(texts)
+    results = ray.get(futures)
     with tqdm(total=total) as pbar:
-        for batch, fut in zip(batches, futures):
-            out = ray.get(fut)
+        for batch, out in zip(batches, results):
             embeddings.extend(out)
             pbar.update(len(batch))
 

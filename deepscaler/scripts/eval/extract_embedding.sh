@@ -19,5 +19,5 @@ echo "Output Directory: ${OUTPUT_DIR}"
         embedding.n_gpus_per_node=8 \
         embedding.model.name=${MODEL_PATH} \
         data.path=$HOME/data/deepscaler/train.parquet \
-        embedding.output_path=OUTPUT_DIR \
-        data.train_ratio=0.01 
+        embedding.output_path=$OUTPUT_DIR \
+        data.train_ratio=0.01
