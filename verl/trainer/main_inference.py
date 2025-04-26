@@ -139,19 +139,33 @@ def main(config):
     batches_idx = [indices[i:i+bs] for i in range(0, total, bs)]
     batches_txt = [[texts[i] for i in batch] for batch in batches_idx]
 
-    # Dispatch to actors in round-robin
+    # Dispatch and collect with progress
     futures = []
     for i, (idxs, txts) in enumerate(zip(batches_idx, batches_txt)):
         actor = actors[i % num_gpus]
         futures.append(actor.encode.remote(idxs, txts))
 
-    # Collect
-    results = ray.get(futures)
-    dim = results[0][1].shape[1]
-    embeddings = np.zeros((total, dim), dtype=results[0][1].dtype)
-    for idxs, emb in results:
-        embeddings[idxs, :] = emb
+    embeddings = np.zeros((total, 1), dtype=float)  # placeholder dims
+    collected = 0
 
+    # Use ray.wait to progressively collect results
+    remaining = futures.copy()
+    results = []
+    with tqdm(total=total, desc="Prompts processed") as pbar:
+        while remaining:
+            done, remaining = ray.wait(remaining, num_returns=1)
+            idxs, emb = ray.get(done[0])
+            if embeddings.shape[1] == 1:
+                # initialize correct shape on first batch
+                dim = emb.shape[1]
+                embeddings = np.zeros((total, dim), dtype=emb.dtype)
+            embeddings[idxs, :] = emb
+            collected += len(idxs)
+            pbar.update(len(idxs))
+
+
+    print("Examples:")
+    print(embeddings[:3])
     # === Stats ===
     var_smp = np.var(embeddings, axis=1)
     print(f"Sample variance: mean={var_smp.mean():.4f}, std={var_smp.std():.4f}, min={var_smp.min():.4f}, max={var_smp.max():.4f}")
@@ -168,3 +182,7 @@ def main(config):
     out = os.path.join(config.embedding.output_path, 'embeddings.npy')
     np.save(out, embeddings)
     print(f"Saved embeddings to {out}, shape={embeddings.shape}")
+
+
+if __name__ == '__main__':
+    main()

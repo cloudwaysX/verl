@@ -10,7 +10,7 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 
 PROJECT_NAME='deepscaler_4k_v2'
-EXPERIMENT_NAME='v3_deepscaler-1.5b-2k_fixordergreedy_clipratio0.5ANDvar' 
+EXPERIMENT_NAME='v3_deepscaler-1.5b-3k_fixordergreedy_clipratio0.5ANDvar' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
@@ -22,7 +22,7 @@ python3 -m verl.trainer.main_ppo \
     data.train_batch_size=128 \
     data.val_batch_size=512 \
     data.max_prompt_length=1024 \
-    data.max_response_length=2048 \
+    data.max_response_length=3072 \
     actor_rollout_ref.model.path=$MODEL_PATH \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -69,4 +69,5 @@ python3 -m verl.trainer.main_ppo \
     +active_strategy.shufflefixorder=False \
     active_strategy.greedy_top_percent=0 \
     +active_strategy.size_threshold=0 \
-    +active_strategy.score_threshold=0.5 
+    active_strategy.score_threshold=[0.5,100] \
+    +active_strategy.resume_sampler=True

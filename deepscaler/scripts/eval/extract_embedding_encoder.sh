@@ -20,7 +20,7 @@ python3 -m verl.trainer.main_inference \
     embedding.model.name=${MODEL_PATH} \
     data.path=$HOME/data/deepscaler/train.parquet \
     embedding.output_path=$OUTPUT_DIR \
-    data.train_ratio=0.01 \
+    data.train_ratio=1 \
     +model.encoder=True
 
 

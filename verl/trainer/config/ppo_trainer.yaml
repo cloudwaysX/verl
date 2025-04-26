@@ -19,6 +19,7 @@ active_strategy:
   greedy_top_percent: 0.0
   selection_metric: variance
   score_threshold: 0.0
+  oed: random
 
 actor_rollout_ref:
   hybrid_engine: True
