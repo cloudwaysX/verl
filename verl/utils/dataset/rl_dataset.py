@@ -29,6 +29,7 @@ import verl.utils.torch_functional as verl_F
 from verl.trainer.ppo.preselect import selection_for_math_difficulty, selection_for_mathamc_difficulty
 from verl.trainer.ppo.preselect import selection_for_deepscaler_difficulty
 from verl.trainer.ppo.preselect import selection_for_openthoughts_difficulty, balance_dataset_by_ability
+from verl.trainer.ppo.oed import coreset_selection
 
 
 def collate_fn(data_list: list[dict]) -> dict:
@@ -94,7 +95,18 @@ class RLHFDataset(Dataset):
                  truncation='error',
                  train_ratio=1,
                  train_ratio_seed=None,
-                 preselect=None):
+                 embedding_path: str = None,
+                 oed: Optional[str] = None,):
+        """
+        oed:
+            balance_by_ability: balance the dataset by ability
+            math_difficulty: select hard examples for math
+            mathamc_difficulty: select hard examples for mathamc
+            deepscaler_difficulty38: select hard examples for deepscaler
+            openthoughts_difficulty4: select hard examples for openthoughts
+            coreset: coreset selection
+        embedding_path: path to embedding use for some oed strategies
+        """
         if not isinstance(parquet_files, (List, ListConfig)):
             parquet_files = [parquet_files]
 
@@ -119,7 +131,11 @@ class RLHFDataset(Dataset):
         # default not store
         self.serialize_dataset = False
         self._download()
-        self._read_files_and_tokenize(train_ratio, train_ratio_seed, preselect)
+        self._read_files_and_tokenize(
+                train_ratio, 
+                train_ratio_seed, 
+                embedding_path,
+                oed)
         self._set_all_prompt_ids()
 
     def _download(self, use_origin_parquet=False):
@@ -128,44 +144,68 @@ class RLHFDataset(Dataset):
         for i, parquet_file in enumerate(parquet_files):
             self.parquet_files[i] = copy_to_local(src=parquet_file, cache_dir=self.cache_dir)
 
-    def _read_files_and_tokenize(self, train_ratio, train_ratio_seed=None, preselect=None):
-        dataframes = []
+    def _read_files_and_tokenize(self, 
+                                 train_ratio, 
+                                 train_ratio_seed=None, 
+                                 embedding_path=None,
+                                 oed="random"):
+        dfs = []
         for parquet_file in self.parquet_files:
             # read parquet files and cache
             dataframe = pd.read_parquet(parquet_file)
-            dataframes.append(dataframe)
-        self.dataframe = pd.concat(dataframes)
+            dfs.append(dataframe)
+        dfs = pd.concat(dfs)
+        
+        # optionally load embeddings (must align 1:1 with df rows)
+        if oed in ["coreset"]:
+            if embedding_path:
+                embeddings = np.load(embedding_path)
+                assert embeddings.shape[0] == len(dfs), (
+                    f"Embeddings length {embeddings.shape[0]} != #samples {len(dfs)}"
+                )
+            else:
+                raise ValueError("No embedding path provided for coreset oed")
+        else:
+            embeddings = None
 
-        # filter out too long prompts
-        tokenizer = self.tokenizer
-        prompt_key = self.prompt_key
-        self.dataframe = self.dataframe[self.dataframe.apply(lambda doc: len(
-            tokenizer.apply_chat_template(doc[prompt_key], add_generation_prompt=True)) <= self.max_prompt_length,
-                                                             axis=1)]
-        if train_ratio < 1:
-            size = int(len(self.dataframe)*train_ratio)
-            if preselect in ["balance_by_ability"]:
-                self.dataframe = balance_dataset_by_ability(self.dataframe, size, train_ratio_seed)
-            elif train_ratio_seed is not None:
+        # Filter out prompts that are too long
+        mask = dfs.apply(
+            lambda row: len(
+                self.tokenizer.apply_chat_template(
+                    row[self.prompt_key],
+                    add_generation_prompt=True
+                )
+            ) <= self.max_prompt_length,
+            axis=1
+        ).to_numpy()
+        dfs = dfs.loc[mask].reset_index(drop=True)
+        if embeddings is not None:
+            embeddings = embeddings[mask]
+            
+        self.dataframe = dfs
+        self.embeddings = embeddings
+        
+        # decide the training budget
+        size = int(len(self.dataframe)*train_ratio)
+            
+        if oed in ["balance_by_ability"]:
+            self.dataframe = balance_dataset_by_ability(self.dataframe, size, train_ratio_seed)
+        elif oed in ['math_difficulty']:
+            self.dataframe = selection_for_math_difficulty(self.dataframe)
+        elif oed in ["mathamc_difficulty"]:
+            self.dataframe = selection_for_mathamc_difficulty(self.dataframe)
+        elif oed in ["deepscaler_difficulty38"]:
+            self.dataframe = selection_for_deepscaler_difficulty(self.dataframe)
+        elif oed in ["openthoughts_difficulty4"]:
+            self.dataframe = selection_for_openthoughts_difficulty(self.dataframe)
+        elif oed in ["coreset"]:
+            self.dataframe = coreset_selection(self.dataframe, size, embeddings, train_ratio_seed)
+        elif oed in ["random"]:
+            if train_ratio_seed is not None:
                 np.random.seed(train_ratio_seed)
                 self.dataframe = self.dataframe.sample(frac=1, random_state=train_ratio_seed).reset_index(drop=True)
             self.dataframe = self.dataframe.head(size)
-        elif preselect in ["balance_by_ability"]:
-            raise ValueError(f"Preselect {preselect} is not compatible with train_ratio = 1")
-            
-        if preselect is not None:
-            if preselect in ['math_difficulty']:
-                self.dataframe = selection_for_math_difficulty(self.dataframe)
-            elif preselect in ["mathamc_difficulty"]:
-                self.dataframe = selection_for_mathamc_difficulty(self.dataframe)
-            elif preselect in ["deepscaler_difficulty38"]:
-                self.dataframe = selection_for_deepscaler_difficulty(self.dataframe)
-            elif preselect in ["openthoughts_difficulty4"]:
-                self.dataframe = selection_for_openthoughts_difficulty(self.dataframe)
-            elif preselect in ["balance_by_ability"]:
-                pass # Already done above
-            else:
-                raise ValueError(f"No preselect method {preselect} found")
+
         print(f"The len of final dataset is {len(self.dataframe)}")
 
     def resume_dataset_state(self,train_ratio=1):
