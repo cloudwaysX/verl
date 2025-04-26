@@ -12,27 +12,26 @@ from verl.utils.hdfs_io import makedirs
 import pandas as pd
 
 @ray.remote(num_gpus=1)
-def process_batch(model_path, batch_texts, max_length, pooling_method, normalize):
-    # Dynamically obtain and use the GPU assigned by Ray
+def process_batch(model_path, batch_indices, batch_texts, max_length, pooling_method, normalize):
     import ray as _ray
     import os as _os
     import torch as _torch
     import numpy as _np
     from transformers import AutoTokenizer as _AutoTokenizer, AutoModel as _AutoModel
 
+    # Restrict to the GPU assigned by Ray
     gpu_ids = _ray.get_gpu_ids()
     assert len(gpu_ids) == 1, f"Expected exactly one GPU per worker, got: {gpu_ids}"
-    # Restrict this process to the assigned GPU
     _os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_ids[0])
     device = _torch.device("cuda:0")
-    print(f"Ray assigned GPU id: {gpu_ids[0]}, using device: {device}")
 
     tokenizer = _AutoTokenizer.from_pretrained(model_path)
     model = _AutoModel.from_pretrained(model_path)
     model.to(device)
     model.eval()
 
-    encoded_input = tokenizer(
+    # Tokenize and move to device
+    encoded = tokenizer(
         batch_texts,
         padding=True,
         truncation=True,
@@ -41,23 +40,23 @@ def process_batch(model_path, batch_texts, max_length, pooling_method, normalize
     ).to(device)
 
     with _torch.no_grad():
-        model_output = model(**encoded_input)
+        output = model(**encoded)
 
     if pooling_method == 'cls':
-        batch_embeddings = model_output.last_hidden_state[:, 0, :].cpu().numpy()
+        embeddings = output.last_hidden_state[:, 0, :].cpu().numpy()
     elif pooling_method == 'mean':
-        token_embeddings = model_output[0]
-        mask = encoded_input['attention_mask'].unsqueeze(-1).expand(token_embeddings.size()).float()
-        summed = _torch.sum(token_embeddings * mask, dim=1)
-        counts = _torch.clamp(mask.sum(dim=1), min=1e-9)
-        batch_embeddings = (summed / counts).cpu().numpy()
+        tokens = output[0]
+        mask = encoded['attention_mask'].unsqueeze(-1).expand(tokens.size()).float()
+        summed = (_torch.sum(tokens * mask, dim=1) / _torch.clamp(mask.sum(dim=1), min=1e-9)).cpu().numpy()
+        embeddings = summed
     else:
         raise NotImplementedError(f"Pooling method {pooling_method} not implemented.")
 
     if normalize:
-        batch_embeddings = batch_embeddings / _np.linalg.norm(batch_embeddings, axis=1, keepdims=True)
+        embeddings = embeddings / _np.linalg.norm(embeddings, axis=1, keepdims=True)
 
-    return batch_embeddings
+    # Return original indices and embeddings together
+    return batch_indices, embeddings
 
 @hydra.main(config_path='config', config_name='inference', version_base=None)
 def main(config):
@@ -71,51 +70,58 @@ def main(config):
     if not ray.is_initialized():
         ray.init()
 
+    # Load model locally
     model_name = config.embedding.model.name
     model_path = copy_to_local(model_name)
 
-    # Load and optionally sample dataset
-    dataset = pd.read_parquet(config.data.path)
+    # Read and optionally subsample data
+    df = pd.read_parquet(config.data.path)
     if config.data.train_ratio < 1:
-        size = int(len(dataset) * config.data.train_ratio)
+        n = int(len(df) * config.data.train_ratio)
         if config.data.train_ratio_seed is not None:
             np.random.seed(config.data.train_ratio_seed)
-            dataset = dataset.sample(frac=1, random_state=config.data.train_ratio_seed).reset_index(drop=True)
-        dataset = dataset.head(size)
+            df = df.sample(frac=1, random_state=config.data.train_ratio_seed).reset_index(drop=True)
+        df = df.head(n)
 
-    texts = []
-    for prompt in dataset[config.data.prompt_key].tolist():
+    # Prepare prompts and indices
+    raw_prompts = []
+    for prompt in df[config.data.prompt_key].tolist():
         if hasattr(prompt, '__iter__') and not isinstance(prompt, str):
             first = prompt[0]
-            texts.append(first['content'] if isinstance(first, dict) and 'content' in first else str(first))
+            raw_prompts.append(first['content'] if isinstance(first, dict) and 'content' in first else str(first))
         else:
-            texts.append(prompt)
+            raw_prompts.append(prompt)
+    total = len(raw_prompts)
+    all_indices = list(range(total))
 
-    # Batch and distribute
+    # Batch indices and texts
     batch_size = config.embedding.batch_size
-    batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
+    batches_idx = [all_indices[i:i + batch_size] for i in range(0, total, batch_size)]
+    batches_txt = [[raw_prompts[i] for i in idxs] for idxs in batches_idx]
 
+    # Launch Ray tasks with index binding
     futures = [
         process_batch.remote(
             model_path,
-            batch,
+            idxs,
+            texts,
             config.embedding.max_length,
             config.embedding.pooling_method,
             config.embedding.normalize_embeddings
         )
-        for batch in batches
+        for idxs, texts in zip(batches_idx, batches_txt)
     ]
 
-    # Collect results
-    embeddings = []
-    total = len(texts)
+    # Gather all results
     results = ray.get(futures)
-    with tqdm(total=total) as pbar:
-        for batch, out in zip(batches, results):
-            embeddings.extend(out)
-            pbar.update(len(batch))
 
-    embeddings = np.array(embeddings)
+    # Allocate and fill embeddings by original index
+    # Determine dimension
+    emb_dim = results[0][1].shape[1]
+    embeddings = np.zeros((total, emb_dim), dtype=results[0][1].dtype)
+    for idxs, emb in results:
+        print(f"Processing batch {idxs}")
+        embeddings[idxs, :] = emb
 
     # Save
     makedirs(config.embedding.output_path, exist_ok=True)
