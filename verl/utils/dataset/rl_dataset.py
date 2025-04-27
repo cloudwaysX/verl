@@ -96,7 +96,8 @@ class RLHFDataset(Dataset):
                  train_ratio=1,
                  train_ratio_seed=None,
                  embedding_path: str = None,
-                 oed: Optional[str] = None,):
+                 oed: Optional[str] = None,
+                 oed_save_path: Optional[str] = None):
         """
         oed:
             balance_by_ability: balance the dataset by ability
@@ -135,7 +136,8 @@ class RLHFDataset(Dataset):
                 train_ratio, 
                 train_ratio_seed, 
                 embedding_path,
-                oed)
+                oed,
+                oed_save_path)
         self._set_all_prompt_ids()
 
     def _download(self, use_origin_parquet=False):
@@ -148,7 +150,8 @@ class RLHFDataset(Dataset):
                                  train_ratio, 
                                  train_ratio_seed=None, 
                                  embedding_path=None,
-                                 oed="random"):
+                                 oed="random",
+                                 oed_save_path=None):
         dfs = []
         for parquet_file in self.parquet_files:
             # read parquet files and cache
@@ -199,7 +202,8 @@ class RLHFDataset(Dataset):
         elif oed in ["openthoughts_difficulty4"]:
             self.dataframe = selection_for_openthoughts_difficulty(self.dataframe)
         elif oed in ["coreset"]:
-            self.dataframe = coreset_selection(self.dataframe, size, embeddings)
+            idxs = coreset_selection(embeddings, size, oed_save_path)
+            self.dataframe = self.dataframe.iloc[idxs]
         elif oed in ["random"]:
             if train_ratio_seed is not None:
                 np.random.seed(train_ratio_seed)
