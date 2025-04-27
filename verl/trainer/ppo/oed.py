@@ -1,8 +1,9 @@
 import numpy as np
 from sklearn.metrics import pairwise_distances
 import os
+from tqdm import tqdm
 
-def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: Optional[str] = None) -> list[int]:
+def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = None) -> list[int]:
     """
     Select `size` points from `embeddings` via farthest‐first (coreset) traversal.
 
@@ -33,7 +34,13 @@ def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: Optional
     selected_idxs: list[int] = []
 
     # 3. Repeat until we’ve picked `size` centers:
-    for _ in range(size):
+    # create one bar; it will only redraw at most every `mininterval` seconds
+    bar = tqdm(total=size,
+               desc="Selecting coreset",
+               unit="pt",
+               leave=False)
+
+    for i in range(size):
         # 3a. Find the point that is currently farthest from all chosen centers:
         #     that’s the argmax over min_dist.
         next_idx = int(np.argmax(min_dist))
@@ -48,7 +55,12 @@ def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: Optional
         #     In effect, min_dist[i] always equals:
         #       min ( over centers c chosen so far ) ‖X[i] – X[c]‖₂
         min_dist = np.minimum(min_dist, dists)
+        
+        if i%100 == 0:
+            bar.update(100)
 
+    bar.close()
     # 4. Return the list of selected indices.
+    np.save(cache_file, np.array(selected_idxs, dtype=int))
     return selected_idxs
 
