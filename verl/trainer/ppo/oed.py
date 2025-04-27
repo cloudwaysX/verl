@@ -17,19 +17,24 @@ def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = No
     """
     
     os.makedirs(os.path.dirname(oed_save_path), exist_ok=True)
-    cache_file = os.path.join(os.path.dirname(oed_save_path), 'coreset_idxs.npy')
+    cache_file = os.path.join(os.path.dirname(oed_save_path), 'orderd_coreset_idxs.npy')
     if os.path.exists(cache_file):
         print(f"Loading coreset selection from {cache_file}")
-        selected_idxs = np.load(cache_file)
+        # Because the order is deterministic, we can just compute the selection once and save it.
+        ordered_idxs = np.load(cache_file)
+        selected_idxs = ordered_idxs[:size]
+        print(f"The first 100 selected ids are: {selected_idxs[:100]}")
         return selected_idxs
       
     if mode == "cpu":
-      selected_idxs = corset_selection_cpu(embeddings, size)
+        ordered_idxs = corset_selection_cpu(embeddings, 1)
     elif mode == "gpu":
-        selected_idxs = coreset_selection_gpu(embeddings, size)
+        ordered_idxs = coreset_selection_gpu(embeddings, 1)
     else:
         raise ValueError(f"Unsupported mode: {mode}")
-    np.save(cache_file, selected_idxs)
+    np.save(cache_file, ordered_idxs)
+    selected_idxs = ordered_idxs[:size]
+    print(f"The first 100 selected ids are: {selected_idxs[:100]}")
     return selected_idxs
 
 def corset_selection_cpu(embeddings: np.ndarray, size: int) -> list[int]:
@@ -58,7 +63,7 @@ def corset_selection_cpu(embeddings: np.ndarray, size: int) -> list[int]:
     for i in range(size):
         # 3a. Find the point that is currently farthest from all chosen centers:
         #     that’s the argmax over min_dist.
-        next_idx = int(np.argmax(min_dist))
+        next_idx = int(np.argmax(min_dist)) # Will just choose the firt one
         selected_idxs.append(next_idx)
 
         # 3b. Compute its distance to every point in X:

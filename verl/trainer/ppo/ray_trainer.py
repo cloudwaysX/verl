@@ -590,7 +590,7 @@ class RayPPOTrainer(object):
                                          train_ratio_seed=self.config.data.get('train_ratio_seed', None),
                                          oed=self.config.active_strategy.oed,
                                          embedding_path=self.config.data.get("embedding_path", None),
-                                         oed_save_path=oed_save_path)
+                                         oed_save_path=self.config.active_strategy.oed.get("coreset_idx_path", oed_save_path)
         # use sampler for better ckpt resume
         if self.config.data.shuffle:
             train_dataloader_generator = torch.Generator()

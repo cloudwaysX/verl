@@ -8,6 +8,7 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 # Set default model path if not provided
 
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+MODEL_NAME="DeepSeek-R1-Distill-Qwen-1.5B"
 
 PROJECT_NAME='deepscaler_4k_v2'
 EMBEDMODEL_NAME='e5-mistral-7b-instruct'
@@ -69,5 +70,6 @@ python3 -m verl.trainer.main_ppo \
     active_strategy.greedy_exploration_ratio=0.0\
     active_strategy.greedy_top_percent=0 \
     active_strategy.oed=coreset \
-    +data.embedding_path="/mnt/disk3/verl/embedding/deepscaler/${EMBEDMODEL_NAME}/embeddings.npy"
+    +data.embedding_path="/mnt/disk3/verl/embedding/deepscaler/${EMBEDMODEL_NAME}/embeddings.npy" \
+    +active_strategy.oed.coreset_idx_path="/mnt/disk3/verl/embedding/deepscaler/${EMBEDMODEL_NAME}/oed_${MODEL_NAME}_${data.max_prompt_length}"
 
