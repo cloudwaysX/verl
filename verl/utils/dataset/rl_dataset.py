@@ -199,7 +199,7 @@ class RLHFDataset(Dataset):
         elif oed in ["openthoughts_difficulty4"]:
             self.dataframe = selection_for_openthoughts_difficulty(self.dataframe)
         elif oed in ["coreset"]:
-            self.dataframe = coreset_selection(self.dataframe, size, embeddings, train_ratio_seed)
+            self.dataframe = coreset_selection(self.dataframe, size, embeddings)
         elif oed in ["random"]:
             if train_ratio_seed is not None:
                 np.random.seed(train_ratio_seed)
