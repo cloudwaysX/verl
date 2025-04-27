@@ -2,8 +2,9 @@ import numpy as np
 from sklearn.metrics import pairwise_distances
 import os
 from tqdm import tqdm
+import torch
 
-def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = None) -> list[int]:
+def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = None, mode="cpu") -> list[int]:
     """
     Select `size` points from `embeddings` via farthest‐first (coreset) traversal.
 
@@ -21,7 +22,21 @@ def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = No
         print(f"Loading coreset selection from {cache_file}")
         selected_idxs = np.load(cache_file)
         return selected_idxs
+      
+    if mode == "cpu":
+      selected_idxs = corset_selection_cpu(embeddings, size)
+    elif mode == "gpu":
+        selected_idxs = coreset_selection_gpu(embeddings, size)
+    else:
+        raise ValueError(f"Unsupported mode: {mode}")
+    np.save(cache_file, selected_idxs)
+    return selected_idxs
 
+def corset_selection_cpu(embeddings: np.ndarray, size: int) -> list[int]:
+    """
+    Select `size` points from `embeddings` via farthest‐first (coreset) traversal.
+    """
+    
     X = embeddings
     n_samples = X.shape[0]
 
@@ -61,6 +76,46 @@ def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = No
 
     bar.close()
     # 4. Return the list of selected indices.
-    np.save(cache_file, np.array(selected_idxs, dtype=int))
     return selected_idxs
+
+def coreset_selection_gpu(
+    embeddings: np.ndarray,
+    size: int,
+    device: str = "cuda"
+) -> list[int]:
+    """
+    GPU‐accelerated farthest‐first with proper cleanup.
+    """
+    # 1) Move to GPU in float32; wrap in no_grad so no graph is built
+    with torch.no_grad():
+        X = torch.from_numpy(embeddings).float().to(device)  # (n, d)
+        n = X.size(0)
+        min_dist = torch.full((n,), float("inf"), device=device)
+
+        selected = []
+        bar = tqdm(total=size,
+                  desc="Selecting coreset",
+                  unit="pt",
+                  leave=False)
+        for i in range(size):
+            # pick farthest point
+            idx = int(min_dist.argmax().item())
+            selected.append(idx)
+
+            # update distances in one big cdist
+            d = torch.cdist(X, X[idx:idx+1], p=2).squeeze(1)  # (n,)
+            min_dist = torch.minimum(min_dist, d)
+            if i%100 == 0:
+                bar.update(100)
+
+
+    # 2) Cleanup: delete GPU tensors & sync + empty cache
+    del X, min_dist
+    # make sure all CUDA kernels are done
+    torch.cuda.synchronize(device)
+    # free as much as possible back to the allocator
+    torch.cuda.empty_cache()
+
+    return selected
+
 
