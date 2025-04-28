@@ -27,9 +27,9 @@ def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = No
         return selected_idxs
       
     if mode == "cpu":
-        ordered_idxs = corset_selection_cpu(embeddings, 1)
+        ordered_idxs = corset_selection_cpu(embeddings, len(embeddings))
     elif mode == "gpu":
-        ordered_idxs = coreset_selection_gpu(embeddings, 1)
+        ordered_idxs = coreset_selection_gpu(embeddings, len(embeddings))
     else:
         raise ValueError(f"Unsupported mode: {mode}")
     np.save(cache_file, ordered_idxs)
