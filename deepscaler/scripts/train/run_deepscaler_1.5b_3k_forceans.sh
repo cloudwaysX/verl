@@ -9,20 +9,20 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 
-PROJECT_NAME='deepscaler_10k'
-EXPERIMENT_NAME='v3_deepscaler-1.5b-2k_editval' 
+PROJECT_NAME='deepscaler_4k_v2'
+EXPERIMENT_NAME='v3_deepscaler-1.5b-3k_foceansoveredit_w80_200s' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_ratio=0.25 \
+    data.train_ratio=0.1 \
     +data.train_ratio_seed=42 \
     data.train_files=$HOME/data/deepscaler/train.parquet \
     data.val_files=[$HOME/data/aime/test.parquet,$HOME/data/amc/test.parquet,$HOME/data/math/test.parquet,$HOME/data/minerva/test.parquet] \
     data.train_batch_size=128 \
     data.val_batch_size=512 \
     data.max_prompt_length=1024 \
-    data.max_response_length=2048 \
+    data.max_response_length=3072 \
     actor_rollout_ref.model.path=$MODEL_PATH \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -41,13 +41,14 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.temperature=0.6 \
-    +actor_rollout_ref.rollout.val_temperature=0.0 \
+    +actor_rollout_ref.rollout.val_temperature=0.6 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
     actor_rollout_ref.rollout.n=8 \
-    +actor_rollout_ref.rollout.n_val=1 \
+    +actor_rollout_ref.rollout.n_val=8 \
     +actor_rollout_ref.rollout.use_edit_for_validation=True \
     +actor_rollout_ref.rollout.use_longer_response_for_validation=True \
-    actor_rollout_ref.rollout.force_append_answers=null \
+    actor_rollout_ref.rollout.force_append_answers="edit" \
+    +actor_rollout_ref.rollout.append_rethink_tokens=False \
     +actor_rollout_ref.rollout.forceans_for_untruncated=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=8192 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
@@ -59,12 +60,12 @@ python3 -m verl.trainer.main_ppo \
     +trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
-    trainer.save_freq=100 \
+    trainer.save_freq=93 \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
-    trainer.total_epochs=10 "${@:1}"\
+    trainer.total_epochs=20 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
-    reward_model.edit_weight=0.0 \
+    reward_model.edit_weight=0.8 \
     active_strategy.selection_metric=null \
     active_strategy.strategy_type=null
