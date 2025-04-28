@@ -4,7 +4,11 @@ import os
 from tqdm import tqdm
 import torch
 
-def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = None, mode="cpu") -> list[int]:
+def coreset_selection(embeddings: np.ndarray, 
+                      size: int, 
+                      oed_save_path: str = None, 
+                      random_seed: int = None,
+                      mode="cpu") -> list[int]:
     """
     Select `size` points from `embeddings` via farthest‐first (coreset) traversal.
 
@@ -17,7 +21,10 @@ def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = No
     """
     
     os.makedirs(os.path.dirname(oed_save_path), exist_ok=True)
-    cache_file = os.path.join(os.path.dirname(oed_save_path), 'orderd_coreset_idxs.npy')
+    if random_seed is None:
+        cache_file = os.path.join(os.path.dirname(oed_save_path), 'orderd_coreset_idxs.npy')
+    else:
+        cache_file = os.path.join(os.path.dirname(oed_save_path), f'orderd_coreset_idxs_{random_seed}.npy')
     if os.path.exists(cache_file):
         print(f"Loading coreset selection from {cache_file}")
         # Because the order is deterministic, we can just compute the selection once and save it.
@@ -27,9 +34,7 @@ def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = No
         return selected_idxs
       
     if mode == "cpu":
-        ordered_idxs = corset_selection_cpu(embeddings, len(embeddings))
-    elif mode == "gpu":
-        ordered_idxs = coreset_selection_gpu(embeddings, len(embeddings))
+        ordered_idxs = corset_selection_cpu(embeddings, len(embeddings), random_seed)
     else:
         raise ValueError(f"Unsupported mode: {mode}")
     np.save(cache_file, ordered_idxs)
@@ -37,7 +42,7 @@ def coreset_selection(embeddings: np.ndarray, size: int, oed_save_path: str = No
     print(f"The first 100 selected ids are: {selected_idxs[:100]}")
     return selected_idxs
 
-def corset_selection_cpu(embeddings: np.ndarray, size: int) -> list[int]:
+def corset_selection_cpu(embeddings: np.ndarray, size: int, random_seed: int = None) -> list[int]:
     """
     Select `size` points from `embeddings` via farthest‐first (coreset) traversal.
     """
@@ -60,10 +65,15 @@ def corset_selection_cpu(embeddings: np.ndarray, size: int) -> list[int]:
                unit="pt",
                leave=False)
 
+
     for i in range(size):
         # 3a. Find the point that is currently farthest from all chosen centers:
         #     that’s the argmax over min_dist.
-        next_idx = int(np.argmax(min_dist)) # Will just choose the firt one
+        if i == 0 and random_seed is not None:
+            np.random.seed(random_seed)
+            next_idx = np.random.choice(n_samples, 1, replace=False)[0]
+        else:
+            next_idx = int(np.argmax(min_dist)) # Will just choose the firt one
         selected_idxs.append(next_idx)
 
         # 3b. Compute its distance to every point in X:
@@ -83,44 +93,44 @@ def corset_selection_cpu(embeddings: np.ndarray, size: int) -> list[int]:
     # 4. Return the list of selected indices.
     return selected_idxs
 
-def coreset_selection_gpu(
-    embeddings: np.ndarray,
-    size: int,
-    device: str = "cuda"
-) -> list[int]:
-    """
-    GPU‐accelerated farthest‐first with proper cleanup.
-    """
-    # 1) Move to GPU in float32; wrap in no_grad so no graph is built
-    with torch.no_grad():
-        X = torch.from_numpy(embeddings).float().to(device)  # (n, d)
-        n = X.size(0)
-        min_dist = torch.full((n,), float("inf"), device=device)
+# def coreset_selection_gpu(
+#     embeddings: np.ndarray,
+#     size: int,
+#     device: str = "cuda"
+# ) -> list[int]:
+#     """
+#     GPU‐accelerated farthest‐first with proper cleanup.
+#     """
+#     # 1) Move to GPU in float32; wrap in no_grad so no graph is built
+#     with torch.no_grad():
+#         X = torch.from_numpy(embeddings).float().to(device)  # (n, d)
+#         n = X.size(0)
+#         min_dist = torch.full((n,), float("inf"), device=device)
 
-        selected = []
-        bar = tqdm(total=size,
-                  desc="Selecting coreset",
-                  unit="pt",
-                  leave=False)
-        for i in range(size):
-            # pick farthest point
-            idx = int(min_dist.argmax().item())
-            selected.append(idx)
+#         selected = []
+#         bar = tqdm(total=size,
+#                   desc="Selecting coreset",
+#                   unit="pt",
+#                   leave=False)
+#         for i in range(size):
+#             # pick farthest point
+#             idx = int(min_dist.argmax().item())
+#             selected.append(idx)
 
-            # update distances in one big cdist
-            d = torch.cdist(X, X[idx:idx+1], p=2).squeeze(1)  # (n,)
-            min_dist = torch.minimum(min_dist, d)
-            if i%100 == 0:
-                bar.update(100)
+#             # update distances in one big cdist
+#             d = torch.cdist(X, X[idx:idx+1], p=2).squeeze(1)  # (n,)
+#             min_dist = torch.minimum(min_dist, d)
+#             if i%100 == 0:
+#                 bar.update(100)
 
 
-    # 2) Cleanup: delete GPU tensors & sync + empty cache
-    del X, min_dist
-    # make sure all CUDA kernels are done
-    torch.cuda.synchronize(device)
-    # free as much as possible back to the allocator
-    torch.cuda.empty_cache()
+#     # 2) Cleanup: delete GPU tensors & sync + empty cache
+#     del X, min_dist
+#     # make sure all CUDA kernels are done
+#     torch.cuda.synchronize(device)
+#     # free as much as possible back to the allocator
+#     torch.cuda.empty_cache()
 
-    return selected
+#     return selected
 
 

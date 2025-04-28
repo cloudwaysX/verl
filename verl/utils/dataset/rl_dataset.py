@@ -202,7 +202,7 @@ class RLHFDataset(Dataset):
         elif oed in ["openthoughts_difficulty4"]:
             self.dataframe = selection_for_openthoughts_difficulty(self.dataframe)
         elif oed in ["coreset"]:
-            idxs = coreset_selection(embeddings, size, oed_save_path)
+            idxs = coreset_selection(embeddings, size, oed_save_path, train_ratio_seed)
             self.dataframe = self.dataframe.iloc[idxs]
         elif oed in ["random"]:
             if train_ratio_seed is not None:
