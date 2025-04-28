@@ -250,7 +250,8 @@ class vLLMRollout(BaseRollout):
         # TODO(sgm): disable logprob when recompute_log_prob is enable
         # if n = 1: (bs, response_length) ; if n > 1: (bs * n, response_length)
         initial_response = output[0].to(idx.device)
-        if self.config.n > 1 and do_sample:
+        if (self.config.n > 1 and not prompts.meta_info.get('validate', False)) or \
+           (self.config.n_val > 1 and prompts.meta_info.get('validate', False)):
             idx = idx.repeat_interleave(self.config.n, dim=0)
             attention_mask = attention_mask.repeat_interleave(self.config.n, dim=0)
             position_ids = position_ids.repeat_interleave(self.config.n, dim=0)

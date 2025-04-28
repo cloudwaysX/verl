@@ -41,10 +41,10 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.temperature=0.6 \
-    +actor_rollout_ref.rollout.val_temperature=0.6 \
+    +actor_rollout_ref.rollout.val_temperature=0.0 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
     actor_rollout_ref.rollout.n=8 \
-    +actor_rollout_ref.rollout.n_val=8 \
+    +actor_rollout_ref.rollout.n_val=1 \
     +actor_rollout_ref.rollout.use_edit_for_validation=True \
     +actor_rollout_ref.rollout.use_longer_response_for_validation=True \
     actor_rollout_ref.rollout.force_append_answers=null \

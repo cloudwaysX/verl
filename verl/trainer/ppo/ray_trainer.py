@@ -900,10 +900,11 @@ class RayPPOTrainer(object):
             n_val = self.config.actor_rollout_ref.rollout.get("n_val", 1)
             val_temperature = self.config.actor_rollout_ref.rollout.get("val_temperature", 0.0)
             if not do_sample:
-                assert n_val == 1, "n_val must be 1 if do_sample is True"
+                assert n_val == 1, "n_val must be 1 if do_sample is False"
                 assert val_temperature == 0, "val_temperature must be 0 if do_sample is False"
-            if n_val > 1:
-                test_batch = test_batch.repeat(repeat_times=n_val, interleave=True)
+            
+            assert n_val == 1, "n_val > 1 is not supported yet"
+            assert do_sample, "do_sample is false is not supported yet"
 
             if 'multi_modal_inputs' in test_batch.non_tensor_batch.keys():
                 test_gen_batch = test_batch.pop(
