@@ -29,7 +29,7 @@ import verl.utils.torch_functional as verl_F
 from verl.trainer.ppo.preselect import selection_for_math_difficulty, selection_for_mathamc_difficulty
 from verl.trainer.ppo.preselect import selection_for_deepscaler_difficulty
 from verl.trainer.ppo.preselect import selection_for_openthoughts_difficulty, balance_dataset_by_ability
-from verl.trainer.ppo.oed import coreset_selection
+from verl.trainer.ppo.oed import coreset_selection, reverse_coreset_selection
 
 
 def collate_fn(data_list: list[dict]) -> dict:
@@ -203,6 +203,9 @@ class RLHFDataset(Dataset):
             self.dataframe = selection_for_openthoughts_difficulty(self.dataframe)
         elif oed in ["coreset"]:
             idxs = coreset_selection(embeddings, size, oed_save_path, train_ratio_seed)
+            self.dataframe = self.dataframe.iloc[idxs]
+        elif oed in ["reverse_coreset"]:
+            idxs = reverse_coreset_selection(embeddings, size, oed_save_path, train_ratio_seed)
             self.dataframe = self.dataframe.iloc[idxs]
         elif oed in ["random"]:
             if train_ratio_seed is not None:
