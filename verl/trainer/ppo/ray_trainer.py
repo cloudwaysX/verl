@@ -904,7 +904,7 @@ class RayPPOTrainer(object):
                 assert val_temperature == 0, "val_temperature must be 0 if do_sample is False"
             
             assert n_val == 1, "n_val > 1 is not supported yet"
-            assert do_sample, "do_sample is false is not supported yet"
+            assert not do_sample, "do_sample is false is not supported yet"
 
             if 'multi_modal_inputs' in test_batch.non_tensor_batch.keys():
                 test_gen_batch = test_batch.pop(
