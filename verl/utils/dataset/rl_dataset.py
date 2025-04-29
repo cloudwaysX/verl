@@ -216,8 +216,26 @@ class RLHFDataset(Dataset):
                                              initial_seedsamples_size)
             self.dataframe = self.dataframe.iloc[idxs]
         elif oed in ["redant"]:
+            # This one does not use filtered embeddings, so we need extra process....
+            # TODO: A better way to do this is to make redant_selection work with filtered embeddings
             idxs = redant_selection(size, oed_save_path, train_ratio_seed)
-            self.dataframe = self.dataframe.iloc[idxs]
+            # Store the original indices that were kept
+            original_indices_kept = np.where(mask)[0]
+            print(f"Original indices kept has len {len(original_indices_kept)}")
+            # Create a mapping from original index to new index for kept items
+            # Example: if original_indices_kept is [0, 1, 3, 4, 5]
+            # Then original index 0 maps to new index 0
+            # Then original index 1 maps to new index 1
+            # Then original index 3 maps to new index 2
+            # etc.
+            original_to_new_index_map = {original_idx: new_idx for new_idx, original_idx in enumerate(original_indices_kept)}
+            new_selected_idx = []
+            for original_idx in idxs:
+                # Check if this original index was kept by the mask
+                if original_idx in original_to_new_index_map:
+                    # If kept, find its new index and add it to the new list
+                    new_selected_idx.append(original_to_new_index_map[original_idx])
+            self.dataframe = self.dataframe.iloc[new_selected_idx]
         elif oed in ["random"]:
             if train_ratio_seed is not None:
                 np.random.seed(train_ratio_seed)
