@@ -208,6 +208,7 @@ def reverse_coreset_selection_cpu(
 ###################################################
 # RedAnt: Adaptive coverage sampling
 ###################################################
+import json
 def redant_selection(size: int, 
                      oed_save_path: str = None, 
                      random_seed: int = None, 
@@ -217,17 +218,26 @@ def redant_selection(size: int,
     """
     
     # RedAnt is not deterministic, so we cache the selection based on the size.
-    cache_file = os.path.join(os.path.dirname(oed_save_path), f'redant_idxs_size{size}.npy')
+    cache_file = os.path.join(os.path.dirname(oed_save_path), f'redant_idxs_size{size}.json')
 
     if os.path.exists(cache_file):
         print(f"Loading coreset selection from {cache_file}")
         # Because the order is deterministic, we can just compute the selection once and save it.
-        selected_idxs = np.load(cache_file)
+        # Load indices from the JSON file
+        with open(cache_file, 'r') as f:
+            selected_idxs = json.load(f)
+        # Ensure the loaded data is a list of integers
+        if not isinstance(selected_idxs, list) or not all(isinstance(x, int) for x in selected_idxs):
+             raise TypeError(f"Cached data in {cache_file} is not a list of integers.")
         return selected_idxs
     else:
+        # The part that would generate the selection is removed as per the user's request
+        # to only handle loading from cache.
         raise ValueError(
-            f"RedAnt selection not cached for size {size}. "
-            "You need to run Google internal RedAnt first."
+            f"RedAnt selection not cached for size {size} at {cache_file}. "
+            "You need to run Google internal RedAnt first to generate the cache file."
+            # Or, if running RedAnt is not possible, manually create the JSON file
+            # at the specified path with a list of indices.
         )
 
     
