@@ -4,8 +4,9 @@ import os
 from tqdm import tqdm
 import torch
 
-
+##################################################
 # Coreset selection
+##################################################
 def coreset_selection(embeddings: np.ndarray, 
                       size: int, 
                       oed_save_path: str = None, 
@@ -96,19 +97,22 @@ def corset_selection_cpu(embeddings: np.ndarray, size: int, random_seed: int = N
     return selected_idxs
   
   
-
+##################################################
 # Reverse coreset selection
+##################################################
 def reverse_coreset_selection(embeddings: np.ndarray, 
                               size: int, 
                               oed_save_path: str = None, 
                               random_seed: int = None, 
+                              initial_seedsamples_size: int = 1,
                               mode="cpu") -> list[int]:
 
+    assert initial_seedsamples_size > 0, "initial_seedsamples_size must be greater than 0"
     os.makedirs(os.path.dirname(oed_save_path), exist_ok=True)
     if random_seed is None:
-        cache_file = os.path.join(os.path.dirname(oed_save_path), 'orderd_reversed_coreset_idxs.npy')
+        cache_file = os.path.join(os.path.dirname(oed_save_path), f'orderd_reversed_coreset_initsize{initial_seedsamples_size}_idxs.npy')
     else:
-        cache_file = os.path.join(os.path.dirname(oed_save_path), f'orderd_reversed_coreset_idxs_{random_seed}.npy')
+        cache_file = os.path.join(os.path.dirname(oed_save_path), f'orderd_reversed_coreset_initsize{initial_seedsamples_size}_idxs_{random_seed}.npy')
     if os.path.exists(cache_file):
         print(f"Loading coreset selection from {cache_file}")
         # Because the order is deterministic, we can just compute the selection once and save it.
@@ -117,8 +121,15 @@ def reverse_coreset_selection(embeddings: np.ndarray,
         print(f"The first 100 selected ids are: {selected_idxs[:100]}")
         return selected_idxs
       
+    if initial_seedsamples_size > 1:
+        assert random_seed is not None, "random_seed must be specified when initial_seedsamples_size is greater than 1"
+      
     if mode == "cpu":
-        ordered_idxs = reverse_coreset_selection_cpu(embeddings, len(embeddings)//2, random_seed)
+        ordered_idxs = reverse_coreset_selection_cpu(
+            embeddings, 
+            len(embeddings)//2, 
+            initial_seedsamples_size,
+            random_seed)
     else:
         raise ValueError(f"Unsupported mode: {mode}")
     np.save(cache_file, ordered_idxs)
@@ -126,7 +137,11 @@ def reverse_coreset_selection(embeddings: np.ndarray,
     print(f"The first 100 selected ids are: {selected_idxs[:100]}")
     return selected_idxs
   
-def reverse_coreset_selection_cpu(embeddings: np.ndarray, size: int, random_seed: int = None) -> list[int]:
+def reverse_coreset_selection_cpu(
+    embeddings: np.ndarray, 
+    size: int, 
+    initial_seedsamples_size: int = 1,
+    random_seed: int = None) -> list[int]:
     """
     Select `size` points from `embeddings` via farthest‐first (coreset) traversal.
     """
@@ -143,11 +158,28 @@ def reverse_coreset_selection_cpu(embeddings: np.ndarray, size: int, random_seed
                desc="Selecting reversed coreset",
                unit="pt",
                leave=False)
+    
+    if random_seed is not None:
+        np.random.seed(random_seed)
 
     for i in range(size):
-        if i == 0 and random_seed is not None:
-            np.random.seed(random_seed)
-            next_idx = np.random.choice(n_samples, 1, replace=False)[0]
+        # Find indices that haven't been taken yet
+        available_indices = np.where(~taken)[0]
+
+        if len(available_indices) == 0:
+            print(
+                "Warning: Ran out of unique samples during initial random "
+                f"seeding at iteration {i}. Stopping early."
+            )
+            break # Stop if no available samples left
+          
+        if i < initial_seedsamples_size and random_seed is not None:
+            # Choose one index randomly from the *available* ones
+            # No need for replace=False since we select only 1 from available unique indices
+            next_idx = np.random.choice(available_indices, 1)[0]
+
+            # Note: The np.random.seed() call was removed from inside this block.
+            # It's now set once before the loop for overall reproducibility.
         elif i == 0:
             # deterministic seed if you like
             next_idx = 0
@@ -169,6 +201,55 @@ def reverse_coreset_selection_cpu(embeddings: np.ndarray, size: int, random_seed
           bar.update(100)
     bar.close()
     return selected_idxs
+
+
+
+
+###################################################
+# RedAnt: Adaptive coverage sampling
+###################################################
+def redant_selection(size: int, 
+                     oed_save_path: str = None, 
+                     random_seed: int = None, 
+                     ) -> list[int]:
+    """
+    Select `size` points from `embeddings` via farthest‐first (coreset) traversal.
+    """
+    
+    # RedAnt is not deterministic, so we cache the selection based on the size.
+    cache_file = os.path.join(os.path.dirname(oed_save_path), f'redant_idxs_size{size}.npy')
+
+    if os.path.exists(cache_file):
+        print(f"Loading coreset selection from {cache_file}")
+        # Because the order is deterministic, we can just compute the selection once and save it.
+        selected_idxs = np.load(cache_file)
+        return selected_idxs
+    else:
+        raise ValueError(
+            f"RedAnt selection not cached for size {size}. "
+            "You need to run Google internal RedAnt first."
+        )
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
 
 
