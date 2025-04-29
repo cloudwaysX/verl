@@ -10,14 +10,14 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 MODEL_NAME="DeepSeek-R1-Distill-Qwen-1.5B"
 
-PROJECT_NAME='deepscaler_10k'
+PROJECT_NAME='deepscaler_oed'
 EMBEDMODEL_NAME='e5-mistral-7b-instruct'
-EXPERIMENT_NAME="v3_deepscaler-1.5b-2k_coreset_${EMBEDMODEL_NAME}" 
+EXPERIMENT_NAME="4kdeepscaler-1.5b-2k_Rcoreset_${EMBEDMODEL_NAME}" 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_ratio=0.25 \
+    data.train_ratio=0.1 \
     +data.train_ratio_seed=null \
     data.train_files=$HOME/data/deepscaler/train.parquet \
     data.val_files=[$HOME/data/aime/test.parquet,$HOME/data/amc/test.parquet,$HOME/data/math/test.parquet,$HOME/data/minerva/test.parquet] \
@@ -69,7 +69,7 @@ python3 -m verl.trainer.main_ppo \
     active_strategy.strategy_type=null\
     active_strategy.greedy_exploration_ratio=0.0\
     active_strategy.greedy_top_percent=0 \
-    active_strategy.oed="coreset" \
+    active_strategy.oed="reverse_coreset" \
     +data.embedding_path="/mnt/disk3/verl/embedding/deepscaler/${EMBEDMODEL_NAME}/embeddings.npy" \
-    +active_strategy.coreset_idx_path="/mnt/disk3/verl/embedding/deepscaler/${EMBEDMODEL_NAME}/oed_${MODEL_NAME}_\${data.max_prompt_length}"
+    +active_strategy.coreset_idx_path="${HOME}/verl/results/deepscaler/${EMBEDMODEL_NAME}/oed_${MODEL_NAME}_\${data.max_prompt_length}"
 

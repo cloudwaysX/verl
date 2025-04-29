@@ -160,7 +160,7 @@ class RLHFDataset(Dataset):
         dfs = pd.concat(dfs)
         
         # optionally load embeddings (must align 1:1 with df rows)
-        if oed in ["coreset"]:
+        if oed in ["coreset", "reverse_coreset"]:
             if embedding_path:
                 embeddings = np.load(embedding_path)
                 assert embeddings.shape[0] == len(dfs), (
