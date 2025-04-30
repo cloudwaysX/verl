@@ -193,25 +193,47 @@ class FSDPSFTTrainer(object):
 
         trust_remote_code = self.config.model.trust_remote_code
         # load config first
-        config = AutoConfig.from_pretrained(local_model_path, trust_remote_code=trust_remote_code)
+        model_config = AutoConfig.from_pretrained(local_model_path, trust_remote_code=trust_remote_code)
+
+        # For Gemma3 models, we need to use the text config
+        if "gemma3" in str(type(model_config)).lower():
+            from transformers import Gemma3ForCausalLM, Gemma3TextConfig
+            model_config = Gemma3TextConfig.from_pretrained(local_model_path)
+            model_config.architectures = ["Gemma3ForCausalLM"]
+            
         if self.config.ulysses_sequence_parallel_size > 1:
             assert self.use_remove_padding, "Sequence parallel is only supported when remove_padding is enabled"
-            from verl.models.registry import check_model_support_rmpad
-            check_model_support_rmpad(config.model_type)
+        #     from verl.models.registry import check_model_support_rmpad
+        #     check_model_support_rmpad(config.model_type)
 
-        if self.use_remove_padding and self.config.ulysses_sequence_parallel_size > 1:
-            from verl.models.transformers.monkey_patch import apply_monkey_patch
-            apply_monkey_patch(config, verbose=True)
+        # if self.use_remove_padding and self.config.ulysses_sequence_parallel_size > 1:
+        #     from verl.models.transformers.monkey_patch import apply_monkey_patch
+        #     apply_monkey_patch(config, verbose=True)
 
         # This may be very large
-        init_context = get_init_weight_context_manager(use_meta_tensor=not config.tie_word_embeddings)
+        init_context = get_init_weight_context_manager(use_meta_tensor=not model_config.tie_word_embeddings)
 
         with init_context():
-            self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(local_model_path,
-                                                                               config=config,
+            if "gemma3" in str(type(model_config)).lower():
+                if self.device_mesh.get_rank() == 0:
+                    print("Using Gemma3ForCausalLM model class")
+
+                from transformers import Gemma3ForCausalLM
+                self.model: PreTrainedModel = Gemma3ForCausalLM.from_pretrained(local_model_path,
+                                                                               config=model_config,
                                                                                torch_dtype=torch.float32,
-                                                                               attn_implementation='flash_attention_2',
+                                                                               attn_implementation=self.config.attn_implementation,
                                                                                trust_remote_code=trust_remote_code)
+            else:
+                self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(local_model_path,
+                                                                               config=model_config,
+                                                                               torch_dtype=torch.float32,
+                                                                               attn_implementation=self.config.attn_implementation,
+                                                                               trust_remote_code=trust_remote_code)
+                
+            if self.use_remove_padding or self.config.ulysses_sequence_parallel_size > 1:
+                from verl.models.transformers.monkey_patch import apply_monkey_patch 
+                apply_monkey_patch(model=self.model, ulysses_sp_size=self.config.ulysses_sequence_parallel_size)
 
             # Apply Liger kernel if use_liger is enabled
             if self.config.model.get('use_liger', False):

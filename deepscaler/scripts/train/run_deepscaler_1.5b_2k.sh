@@ -7,10 +7,10 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 
 # Set default model path if not provided
 
-MODEL_PATH="google/gemma-2-2b-it"
+MODEL_PATH="google/gemma-3-1b-it"
 
 PROJECT_NAME='OpenThough_Gemma'
-EXPERIMENT_NAME='debug_gemma2-2b-2k_editval' 
+EXPERIMENT_NAME='debug_gemma3-1b-2k_editval' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
@@ -24,6 +24,7 @@ python3 -m verl.trainer.main_ppo \
     data.max_prompt_length=1024 \
     data.max_response_length=2048 \
     actor_rollout_ref.model.path=$MODEL_PATH \
+    actor_rollout_ref.actor.fsdp_config.wrap_policy.transformer_layer_cls_to_wrap=[Gemma3DecoderLayer]
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=False \
     actor_rollout_ref.actor.ppo_mini_batch_size=64 \

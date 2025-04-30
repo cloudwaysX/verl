@@ -54,7 +54,7 @@ actor_rollout_ref:
       total_training_steps: -1  # must be override by program
     fsdp_config:
       wrap_policy:
-        # transformer_layer_cls_to_wrap: None
+        transformer_layer_cls_to_wrap: null
         min_num_params: 0
       param_offload: False
       optimizer_offload: False
@@ -63,7 +63,7 @@ actor_rollout_ref:
     fsdp_config:
       param_offload: False
       wrap_policy:
-        # transformer_layer_cls_to_wrap: None
+        transformer_layer_cls_to_wrap: actor_rollout_ref.actor.fsdp_config.wrap_policy.transformer_layer_cls_to_wrap
         min_num_params: 0
     log_prob_micro_batch_size: null # will be deprecated, use log_prob_micro_batch_size_per_gpu
     log_prob_micro_batch_size_per_gpu: null
@@ -121,9 +121,13 @@ critic:
       param_offload: False
       optimizer_offload: False
       wrap_policy:
-        # transformer_layer_cls_to_wrap: None
+        transformer_layer_cls_to_wrap: null
         min_num_params: 0
       fsdp_size: -1
+  multi_model:
+    fsdp_config:
+      wrap_policy:
+        transformer_layer_cls_to_wrap: null
   ppo_mini_batch_size: ${actor_rollout_ref.actor.ppo_mini_batch_size}
   ppo_micro_batch_size: null # will be deprecated, use ppo_micro_batch_size_per_gpu
   ppo_micro_batch_size_per_gpu: null
