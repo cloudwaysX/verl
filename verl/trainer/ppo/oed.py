@@ -110,9 +110,9 @@ def reverse_coreset_selection(embeddings: np.ndarray,
     assert initial_seedsamples_size > 0, "initial_seedsamples_size must be greater than 0"
     os.makedirs(os.path.dirname(oed_save_path), exist_ok=True)
     if random_seed is None:
-        cache_file = os.path.join(os.path.dirname(oed_save_path), f'orderd_reversed_coreset_initsize{initial_seedsamples_size}_idxs.npy')
+        cache_file = os.path.join(oed_save_path, f'orderd_reversed_coreset_initsize{initial_seedsamples_size}_idxs.npy')
     else:
-        cache_file = os.path.join(os.path.dirname(oed_save_path), f'orderd_reversed_coreset_initsize{initial_seedsamples_size}_idxs_{random_seed}.npy')
+        cache_file = os.path.join(oed_save_path, f'orderd_reversed_coreset_initsize{initial_seedsamples_size}_idxs_{random_seed}.npy')
     if os.path.exists(cache_file):
         print(f"Loading coreset selection from {cache_file}")
         # Because the order is deterministic, we can just compute the selection once and save it.
@@ -216,9 +216,9 @@ def redant_selection(size: int,
     """
     Select `size` points from `embeddings` via farthest‐first (coreset) traversal.
     """
-    
+ 
     # RedAnt is not deterministic, so we cache the selection based on the size.
-    cache_file = os.path.join(os.path.dirname(oed_save_path), f'redant_idxs_size{size}.json')
+    cache_file = os.path.join(oed_save_path, f'redant_idxs_size{size}.json')
 
     if os.path.exists(cache_file):
         print(f"Loading coreset selection from {cache_file}")
