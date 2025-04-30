@@ -7,15 +7,15 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 
 # Set default model path if not provided
 
-MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+MODEL_PATH="google/gemma-2-2b-it"
 
-PROJECT_NAME='deepscaler_10k'
-EXPERIMENT_NAME='v3_deepscaler-1.5b-2k_editval' 
+PROJECT_NAME='OpenThough_Gemma'
+EXPERIMENT_NAME='debug_gemma2-2b-2k_editval' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_ratio=0.25 \
+    data.train_ratio=0.025 \
     +data.train_ratio_seed=42 \
     data.train_files=$HOME/data/deepscaler/train.parquet \
     data.val_files=[$HOME/data/aime/test.parquet,$HOME/data/amc/test.parquet,$HOME/data/math/test.parquet,$HOME/data/minerva/test.parquet] \
@@ -25,7 +25,7 @@ python3 -m verl.trainer.main_ppo \
     data.max_response_length=2048 \
     actor_rollout_ref.model.path=$MODEL_PATH \
     actor_rollout_ref.actor.optim.lr=1e-6 \
-    actor_rollout_ref.model.use_remove_padding=True \
+    actor_rollout_ref.model.use_remove_padding=False \
     actor_rollout_ref.actor.ppo_mini_batch_size=64 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=21504 \
