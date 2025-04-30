@@ -88,7 +88,9 @@ def get_fsdp_wrap_policy(module, config=None, is_lora=False):
         policies.append(size_policy)
     elif fsdp_transformer_layer_cls_to_wrap is not None:
         transformer_cls_to_wrap = set()
+        print("DEBUG fsdp_transformer_layer_cls_to_wrap", fsdp_transformer_layer_cls_to_wrap)
         for layer_class in fsdp_transformer_layer_cls_to_wrap:
+            print("Using layer_class", layer_class)
             transformer_cls = get_module_class_from_name(module, layer_class)
             if transformer_cls is None:
                 raise Exception("Could not find the transformer layer class to wrap in the model.")

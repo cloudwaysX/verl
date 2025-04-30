@@ -63,7 +63,7 @@ actor_rollout_ref:
     fsdp_config:
       param_offload: False
       wrap_policy:
-        transformer_layer_cls_to_wrap: actor_rollout_ref.actor.fsdp_config.wrap_policy.transformer_layer_cls_to_wrap
+        transformer_layer_cls_to_wrap: ${actor_rollout_ref.actor.fsdp_config.wrap_policy.transformer_layer_cls_to_wrap}
         min_num_params: 0
     log_prob_micro_batch_size: null # will be deprecated, use log_prob_micro_batch_size_per_gpu
     log_prob_micro_batch_size_per_gpu: null
