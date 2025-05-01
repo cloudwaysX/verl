@@ -23,6 +23,7 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, ProcessorMixin
+import json
 
 from verl.utils.model import compute_position_id_with_mask
 import verl.utils.torch_functional as verl_F
@@ -236,6 +237,10 @@ class RLHFDataset(Dataset):
                     # If kept, find its new index and add it to the new list
                     new_selected_idx.append(original_to_new_index_map[original_idx])
             self.dataframe = self.dataframe.iloc[new_selected_idx]
+            # TODO: legacy, remove this once we have a new checkpoint format
+            cache_file = os.path.join(oed_save_path, f'redant_idxs_size{size}.json')
+            with open(cache_file, 'w') as f:
+                json.dump(new_selected_idx, f)
         elif oed in ["random"]:
             if train_ratio_seed is not None:
                 np.random.seed(train_ratio_seed)
