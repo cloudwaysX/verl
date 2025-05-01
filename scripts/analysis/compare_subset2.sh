@@ -3,7 +3,7 @@
 # Define the path to your Python script
 # Make sure this path is correct relative to where you save the shell script,
 # or use the absolute path.
-ANALYZE_SCRIPT="./analyze_common_text.py"
+ANALYZE_SCRIPT="./compare_subset.py"
 
 # Define the four specific files you want to use
 FILE_1="/home/yifangc_google_com/verl/results/deepscaler/e5-mistral-7b-instruct/oed_DeepSeek-R1-Distill-Qwen-1.5B_1024/orderd_coreset_idxs.npy"
