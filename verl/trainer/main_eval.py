@@ -23,6 +23,7 @@ from verl.utils.fs import copy_to_local
 from verl.utils.reward_score import math, gsm8k
 import pandas as pd
 import numpy as np
+import json
 
 
 def select_reward_fn(data_source, usedeepscaler=False):
@@ -144,116 +145,127 @@ def main(config):
         for weight in edit_weights:
             weighted_scores = weighted_edit_score_lists[weight]
             weighted_edit_scores[weight].append(np.mean(weighted_scores))
+            
+    # Convert to Python native floats for JSON serialization
+    score_variances_list = [float(v) for v in score_variances]
+    
+    # Save to JSON as a simple list
+    variance_output_path = os.path.join(config.output_dir, "variances.json")
+    with open(variance_output_path, 'w') as f:
+        json.dump(score_variances_list, f)
+    
+    print(f"Saved variance values to {variance_output_path}")
         
 
-    # Compute the correlation with difficulty
-    if config.data.get("difficulty_key", None):
-        difficulties = [item[config.data.difficulty_key] for item in dataset["extra_info"]]
-        
-        # Create results DataFrame
-        results_dict = {
-            'difficulty': difficulties,
-            'mean_score': mean_scores,
-            'mean_edit_score': mean_edit_scores,
-            'pass': passes,
-            'edit_pass': edit_passes,
-            'score_variance': score_variances,
-            'clip_ratio': clip_ratios
-        }
-        
-        # Add weighted edit metrics to results
-        for weight in edit_weights:
-            results_dict[f'mean_edit_score_{weight}'] = weighted_edit_scores[weight]
-        
-        results_df = pd.DataFrame(results_dict)
-        
-        # Count None values in difficulty
-        none_count = results_df['difficulty'].isna().sum()
-        print(f'Number of None values in difficulty: {none_count}')
-        
-        # Calculate metrics for all samples
-        print(f"\nOverall metrics (using first {effective_num_response} of {num_response} generations):")
-        print(f'pass@{effective_num_response}: {results_df["pass"].mean():.4f}')
-        print(f'edit_pass@{effective_num_response}: {results_df["edit_pass"].mean():.4f}')
-        print(f'mean_score: {results_df["mean_score"].mean():.4f}')
-        print(f'mean_edit_score: {results_df["mean_edit_score"].mean():.4f}')
-        print(f'mean_score_variance: {results_df["score_variance"].mean():.4f}')
-        print(f'mean_clip_ratio: {results_df["clip_ratio"].mean():.4f}')
-        
-        # Print weighted edit metrics
-        for weight in edit_weights:
-            print(f'mean_edit_score_{weight}: {results_df[f"mean_edit_score_{weight}"].mean():.4f}')
-        
-        # Calculate metrics for samples with None difficulty
-        if none_count > 0:
-            none_df = results_df[results_df['difficulty'].isna()]
-            print("\nMetrics for samples with None difficulty:")
-            print(f'pass@{effective_num_response}: {none_df["pass"].mean():.4f}')
-            print(f'edit_pass@{effective_num_response}: {none_df["edit_pass"].mean():.4f}')
-            print(f'mean_score: {none_df["mean_score"].mean():.4f}')
-            print(f'mean_edit_score: {none_df["mean_edit_score"].mean():.4f}')
+    if edit_responses is not None:
+        # Compute the correlation with difficulty
+        if config.data.get("difficulty_key", None):
+            difficulties = [item[config.data.difficulty_key] for item in dataset["extra_info"]]
             
-            # Print weighted edit metrics for None difficulty
-            for weight in edit_weights:
-                print(f'mean_edit_score_{weight}: {none_df[f"mean_edit_score_{weight}"].mean():.4f}')
-        
-        # Drop rows with None difficulty for correlation analysis
-        valid_df = results_df.dropna(subset=['difficulty'])
-        print(f'\nSamples with valid difficulty: {len(valid_df)}/{total}')
-        
-        # Calculate metrics for samples with valid difficulty
-        print("\nMetrics for samples with valid difficulty:")
-        print(f'pass@{effective_num_response}: {valid_df["pass"].mean():.4f}')
-        print(f'edit_pass@{effective_num_response}: {valid_df["edit_pass"].mean():.4f}')
-        print(f'mean_score: {valid_df["mean_score"].mean():.4f}')
-        print(f'mean_edit_score: {valid_df["mean_edit_score"].mean():.4f}')
-        
-        # Print weighted edit metrics for valid difficulty
-        for weight in edit_weights:
-            print(f'mean_edit_score_{weight}: {valid_df[f"mean_edit_score_{weight}"].mean():.4f}')
-        
-        # Compute correlations
-        if len(valid_df) > 1:
-            print("\nCorrelations with difficulty:")
-            score_columns = ['mean_score', 'mean_edit_score', 'pass', 'edit_pass', 
-                             'score_variance', 'clip_ratio']
+            # Create results DataFrame
+            results_dict = {
+                'difficulty': difficulties,
+                'mean_score': mean_scores,
+                'mean_edit_score': mean_edit_scores,
+                'pass': passes,
+                'edit_pass': edit_passes,
+                'score_variance': score_variances,
+                'clip_ratio': clip_ratios
+            }
             
-            # Add weighted edit score columns
+            # Add weighted edit metrics to results
             for weight in edit_weights:
-                score_columns.append(f'mean_edit_score_{weight}')
+                results_dict[f'mean_edit_score_{weight}'] = weighted_edit_scores[weight]
+            
+            results_df = pd.DataFrame(results_dict)
+            
+            # Count None values in difficulty
+            none_count = results_df['difficulty'].isna().sum()
+            print(f'Number of None values in difficulty: {none_count}')
+            
+            # Calculate metrics for all samples
+            print(f"\nOverall metrics (using first {effective_num_response} of {num_response} generations):")
+            print(f'pass@{effective_num_response}: {results_df["pass"].mean():.4f}')
+            print(f'edit_pass@{effective_num_response}: {results_df["edit_pass"].mean():.4f}')
+            print(f'mean_score: {results_df["mean_score"].mean():.4f}')
+            print(f'mean_edit_score: {results_df["mean_edit_score"].mean():.4f}')
+            print(f'mean_score_variance: {results_df["score_variance"].mean():.4f}')
+            print(f'mean_clip_ratio: {results_df["clip_ratio"].mean():.4f}')
+            
+            # Print weighted edit metrics
+            for weight in edit_weights:
+                print(f'mean_edit_score_{weight}: {results_df[f"mean_edit_score_{weight}"].mean():.4f}')
+            
+            # Calculate metrics for samples with None difficulty
+            if none_count > 0:
+                none_df = results_df[results_df['difficulty'].isna()]
+                print("\nMetrics for samples with None difficulty:")
+                print(f'pass@{effective_num_response}: {none_df["pass"].mean():.4f}')
+                print(f'edit_pass@{effective_num_response}: {none_df["edit_pass"].mean():.4f}')
+                print(f'mean_score: {none_df["mean_score"].mean():.4f}')
+                print(f'mean_edit_score: {none_df["mean_edit_score"].mean():.4f}')
                 
-            for score_column in score_columns:
-                correlation = valid_df['difficulty'].corr(valid_df[score_column])
-                print(f'Correlation between difficulty and {score_column}: {correlation:.4f}')
+                # Print weighted edit metrics for None difficulty
+                for weight in edit_weights:
+                    print(f'mean_edit_score_{weight}: {none_df[f"mean_edit_score_{weight}"].mean():.4f}')
+            
+            # Drop rows with None difficulty for correlation analysis
+            valid_df = results_df.dropna(subset=['difficulty'])
+            print(f'\nSamples with valid difficulty: {len(valid_df)}/{total}')
+            
+            # Calculate metrics for samples with valid difficulty
+            print("\nMetrics for samples with valid difficulty:")
+            print(f'pass@{effective_num_response}: {valid_df["pass"].mean():.4f}')
+            print(f'edit_pass@{effective_num_response}: {valid_df["edit_pass"].mean():.4f}')
+            print(f'mean_score: {valid_df["mean_score"].mean():.4f}')
+            print(f'mean_edit_score: {valid_df["mean_edit_score"].mean():.4f}')
+            
+            # Print weighted edit metrics for valid difficulty
+            for weight in edit_weights:
+                print(f'mean_edit_score_{weight}: {valid_df[f"mean_edit_score_{weight}"].mean():.4f}')
+            
+            # Compute correlations
+            if len(valid_df) > 1:
+                print("\nCorrelations with difficulty:")
+                score_columns = ['mean_score', 'mean_edit_score', 'pass', 'edit_pass', 
+                                'score_variance', 'clip_ratio']
+                
+                # Add weighted edit score columns
+                for weight in edit_weights:
+                    score_columns.append(f'mean_edit_score_{weight}')
+                    
+                for score_column in score_columns:
+                    correlation = valid_df['difficulty'].corr(valid_df[score_column])
+                    print(f'Correlation between difficulty and {score_column}: {correlation:.4f}')
+            else:
+                print("Not enough valid difficulty values to calculate correlation")
+                
+            # Optional: Save results
+            if config.get("output_dir", None):
+                outfile = os.path.join(config.output_dir, f"pass{effective_num_response}_analysis.csv")
+                results_df.to_csv(outfile, index=False)
+                print(f'Results saved to {outfile}')
         else:
-            print("Not enough valid difficulty values to calculate correlation")
+            # If no difficulty key, just print overall metrics
+            print(f"\nOverall metrics (using first {effective_num_response} of {num_response} generations):")
+            print(f'pass@{effective_num_response}: {np.mean(passes):.4f}')
+            print(f'edit_pass@{effective_num_response}: {np.mean(edit_passes):.4f}')
+            print(f'mean_score: {np.mean(mean_scores):.4f}')
+            print(f'mean_edit_score: {np.mean(mean_edit_scores):.4f}')
+            print(f'mean_score_variance: {np.mean(score_variances):.4f}')
+            print(f'mean_clip_ratio: {np.mean(clip_ratios):.4f}')
             
-        # Optional: Save results
-        if config.get("output_dir", None):
-            outfile = os.path.join(config.output_dir, f"pass{effective_num_response}_analysis.csv")
-            results_df.to_csv(outfile, index=False)
-            print(f'Results saved to {outfile}')
-    else:
-        # If no difficulty key, just print overall metrics
-        print(f"\nOverall metrics (using first {effective_num_response} of {num_response} generations):")
-        print(f'pass@{effective_num_response}: {np.mean(passes):.4f}')
-        print(f'edit_pass@{effective_num_response}: {np.mean(edit_passes):.4f}')
-        print(f'mean_score: {np.mean(mean_scores):.4f}')
-        print(f'mean_edit_score: {np.mean(mean_edit_scores):.4f}')
-        print(f'mean_score_variance: {np.mean(score_variances):.4f}')
-        print(f'mean_clip_ratio: {np.mean(clip_ratios):.4f}')
-        
-        # Print weighted edit metrics
-        for weight in edit_weights:
-            print(f'mean_edit_score_{weight}: {np.mean(weighted_edit_scores[weight]):.4f}')
-            
-    # Other correlation analysis
-    # correlation between variance and mean score
-    print(f"Correlation between variance and mean score: {np.corrcoef(score_variances, mean_scores)[0,1]:.4f}")
-    # correlation between variance and mean edit score
-    print(f"Correlation between variance and mean edit score: {np.corrcoef(score_variances, mean_edit_scores)[0,1]:.4f}")
-    # correlation between variance and clip ratio
-    print(f"Correlation between variance and clip ratio: {np.corrcoef(score_variances, clip_ratios)[0,1]:.4f}")
+            # Print weighted edit metrics
+            for weight in edit_weights:
+                print(f'mean_edit_score_{weight}: {np.mean(weighted_edit_scores[weight]):.4f}')
+                
+        # Other correlation analysis
+        # correlation between variance and mean score
+        print(f"Correlation between variance and mean score: {np.corrcoef(score_variances, mean_scores)[0,1]:.4f}")
+        # correlation between variance and mean edit score
+        print(f"Correlation between variance and mean edit score: {np.corrcoef(score_variances, mean_edit_scores)[0,1]:.4f}")
+        # correlation between variance and clip ratio
+        print(f"Correlation between variance and clip ratio: {np.corrcoef(score_variances, clip_ratios)[0,1]:.4f}")
     
     
             
