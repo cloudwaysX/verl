@@ -577,6 +577,7 @@ class RayPPOTrainer(object):
             self.config.trainer.default_local_dir,
             'oed_results'
         )
+        print("DEBUG coreset_idx_path", self.config.active_strategy.get("coreset_idx_path", oed_save_path))
         self.train_dataset = RLHFDataset(parquet_files=self.config.data.train_files,
                                          tokenizer=self.tokenizer,
                                          processor=self.processor,

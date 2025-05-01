@@ -221,7 +221,7 @@ class RLHFDataset(Dataset):
             idxs = redant_selection(size, oed_save_path, train_ratio_seed)
             # Store the original indices that were kept
             original_indices_kept = np.where(mask)[0]
-            print(f"Original indices kept has len {len(original_indices_kept)}")
+            print(f"Original indices kept has  {len(original_indices_kept)}/{len(mask)}")
             # Create a mapping from original index to new index for kept items
             # Example: if original_indices_kept is [0, 1, 3, 4, 5]
             # Then original index 0 maps to new index 0
