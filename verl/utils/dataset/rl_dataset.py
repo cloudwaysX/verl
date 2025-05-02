@@ -238,7 +238,7 @@ class RLHFDataset(Dataset):
                     new_selected_idx.append(original_to_new_index_map[original_idx])
             self.dataframe = self.dataframe.iloc[new_selected_idx]
             # TODO: legacy, remove this once we have a new checkpoint format
-            cache_file = os.path.join(oed_save_path, f'redant_idxs_size{size}.json')
+            cache_file = os.path.join(oed_save_path, f'reindex_redant_selected_indices_{size}.json')
             with open(cache_file, 'w') as f:
                 json.dump(new_selected_idx, f)
         elif oed in ["random"]:

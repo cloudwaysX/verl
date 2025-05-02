@@ -3,7 +3,7 @@
 # Define the path to your Python script that compares TWO files
 # Make sure this path is correct relative to where you save the shell script,
 # or use the absolute path.
-ANALYZE_SCRIPT="./analyze_common_text.py"
+ANALYZE_SCRIPT="./compare_subset.py"
 
 # Define a large size to effectively compare the full length of the shorter list.
 # This number should be larger than the expected maximum possible size of your lists.
@@ -14,16 +14,19 @@ HOME_DIR="/home/yifangc_google_com/verl/results/deepscaler/"
 
 # Define the specific files for the three pairs using the base directory
 # First pair files
-FILE_A_1="${HOME_DIR}/e5-mistral-7b-instruct/trainmodel_agnostic/redant_idxs_size4030.json"
-FILE_A_2="${HOME_DIR}/gecko_en_1b_tpu/trainmodel_agnostic/redant_idxs_size4030.json"
+FILE_A_1="${HOME_DIR}/e5-mistral-7b-instruct/trainmodel_agnostic/redant_selected_indices_403.json"
+FILE_A_2="${HOME_DIR}/gecko_en_1b_tpu/trainmodel_agnostic/redant_selected_indices_403.json"
 
 # Second pair files
-FILE_B_1="${HOME_DIR}/e5-mistral-7b-instruct/trainmodel_agnostic/redant_idxs_size1007.json"
-FILE_B_2="${HOME_DIR}/gecko_en_1b_tpu/trainmodel_agnostic/redant_idxs_size1007.json"
+FILE_B_1="${HOME_DIR}/e5-mistral-7b-instruct/trainmodel_agnostic/redant_selected_indices_1007.json"
+FILE_B_2="${HOME_DIR}/gecko_en_1b_tpu/trainmodel_agnostic/redant_selected_indices_1007.json"
+
+FILE_C_1="${HOME_DIR}/e5-mistral-7b-instruct/trainmodel_agnostic/redant_selected_indices_4030.json"
+FILE_C_2="${HOME_DIR}/gecko_en_1b_tpu/trainmodel_agnostic/redant_selected_indices_4030.json"
 
 # Third pair files
-FILE_C_1="${HOME_DIR}/e5-mistral-7b-instruct/trainmodel_agnostic/redant_idxs_size10078.json"
-FILE_C_2="${HOME_DIR}/gecko_en_1b_tpu/trainmodel_agnostic/redant_idxs_size10078.json"
+FILE_D_1="${HOME_DIR}/e5-mistral-7b-instruct/trainmodel_agnostic/redant_selected_indices_10078.json"
+FILE_D_2="${HOME_DIR}/gecko_en_1b_tpu/trainmodel_agnostic/redant_selected_indices_10078.json"
 
 # Define the specific pairs of files to compare
 # Each element in this array is a string containing the two file paths separated by a space.
@@ -31,6 +34,7 @@ COMPARISON_PAIRS=(
     "$FILE_A_1 $FILE_A_2"
     "$FILE_B_1 $FILE_B_2"
     "$FILE_C_1 $FILE_C_2"
+    "$FILE_D_1 $FILE_D_2"
 )
 
 echo "Starting specific pairwise comparison process for the provided pairs..."

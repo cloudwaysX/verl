@@ -218,7 +218,7 @@ def redant_selection(size: int,
     """
  
     # RedAnt is not deterministic, so we cache the selection based on the size.
-    cache_file = os.path.join(oed_save_path, f'redant_idxs_size{size}.json')
+    cache_file = os.path.join(oed_save_path, f'redant_selected_indices_{size}.json')
 
     if os.path.exists(cache_file):
         print(f"Loading coreset selection from {cache_file}")
