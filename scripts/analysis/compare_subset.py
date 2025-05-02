@@ -97,16 +97,6 @@ if __name__ == "__main__":
             print(f"Error: Invalid step size '{sys.argv[3]}'. Step size must be an integer.")
             sys.exit(1)
 
-    if len(sys.argv) > 4:
-        try:
-            start_size = int(sys.argv[4])
-            if start_size < 0:
-                 print("Error: Start size must be a non-negative integer.")
-                 sys.exit(1)
-        except ValueError:
-            print(f"Error: Invalid start size '{sys.argv[4]}'. Start size must be an integer.")
-            sys.exit(1)
-
 
     # Load the complete lists from the files once
     full_list1 = load_data(file1)
@@ -120,7 +110,7 @@ if __name__ == "__main__":
     max_size = min(len(full_list1), len(full_list2))
 
     # Adjust start_size if it's out of the valid range [0, max_size].
-    start_size = max(0, min(start_size, max_size))
+    start_size = 0
 
 
     # Generate a range of sizes for analysis
@@ -144,7 +134,7 @@ if __name__ == "__main__":
     # Perform calculations for each size and print results
     for current_size in sizes_to_analyze:
         # Skip sizes larger than max_size (should be handled by list generation, but defensive)
-        if current_size > max_size:
+        if current_size > max_size or current_size==0:
              continue
 
         count = count_unique_common_elements_in_slice(full_list1, full_list2, current_size)
