@@ -241,11 +241,14 @@ class RLHFDataset(Dataset):
             cache_file = os.path.join(oed_save_path, f'reindex_redant_selected_indices_{size}.json')
             with open(cache_file, 'w') as f:
                 json.dump(new_selected_idx, f)
-        elif oed in ["random"]:
+        elif oed in ["random", "random_continue1k"]:
             if train_ratio_seed is not None:
                 np.random.seed(train_ratio_seed)
                 self.dataframe = self.dataframe.sample(frac=1, random_state=train_ratio_seed).reset_index(drop=True)
-            self.dataframe = self.dataframe.head(size)
+            if oed == "random_continue1k":
+                self.dataframe = self.dataframe[1000 : 1000 + size] # compelete from select size from first 1 k
+            else:
+                self.dataframe = self.dataframe.head(size)
 
         print(f"The len of final dataset is {len(self.dataframe)}")
 
