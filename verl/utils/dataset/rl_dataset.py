@@ -249,6 +249,8 @@ class RLHFDataset(Dataset):
                 self.dataframe = self.dataframe[1000 : 1000 + size] # compelete from select size from first 1 k
             else:
                 self.dataframe = self.dataframe.head(size)
+        else:
+            raise ValueError(f"Unsupported oed: {oed}")
 
         print(f"The len of final dataset is {len(self.dataframe)}")
 
