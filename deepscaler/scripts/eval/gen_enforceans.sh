@@ -31,4 +31,4 @@ echo "Output Directory: ${OUTPUT_DIR}"
         rollout.top_p=0.95 \
         rollout.gpu_memory_utilization=0.9 \
         rollout.tensor_model_parallel_size=1 \
-        rollout.force_append_answers=True
+        # rollout.force_append_answers=True

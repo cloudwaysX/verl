@@ -6,7 +6,7 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 # Possible values: aime, amc, math, minerva, olympiad_bench
 PROJECT_NAME='deepscaler_5k'
-EXPERIMENT_NAME='deepscaler-1.5b-8k_forceans' 
+EXPERIMENT_NAME='deepscaler-1.5b-4k_forceans' 
 
 # Check if command-line arguments are provided for n_pass and max_response_length
 if [ "$#" -ge 1 ]; then

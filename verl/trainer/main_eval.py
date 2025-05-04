@@ -23,6 +23,7 @@ from verl.utils.fs import copy_to_local
 from verl.utils.reward_score import math, gsm8k
 import pandas as pd
 import numpy as np
+import json
 
 
 def select_reward_fn(data_source, usedeepscaler=False):
@@ -145,6 +146,22 @@ def main(config):
             weighted_scores = weighted_edit_score_lists[weight]
             weighted_edit_scores[weight].append(np.mean(weighted_scores))
         
+    # Convert to Python native floats for JSON serialization
+    score_variances_list = [float(v) for v in score_variances]
+    mean_scores_list = [float(v) for v in mean_scores]
+
+    # Save to JSON as a simple list
+    variance_output_path = os.path.join(config.output_dir, "variances.json")
+    meanaccs_output_path = os.path.join(config.output_dir, "mean_accs.json")
+    with open(variance_output_path, 'w') as f:
+        json.dump(score_variances_list, f)
+    with open(meanaccs_output_path, 'w') as f:
+        json.dump(mean_scores_list, f)
+    
+    print(f"Saved variance values to {variance_output_path}")
+    print(f"Saved meanaccs values to {meanaccs_output_path}")
+
+
 
     # Compute the correlation with difficulty
     if config.data.get("difficulty_key", None):

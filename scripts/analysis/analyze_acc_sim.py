@@ -12,7 +12,7 @@ def main():
     parser = argparse.ArgumentParser(description='Analyze correlation between embedding distances and variance differences')
     parser.add_argument('--embedding_path', type=str, required=True, help='Path to embeddings.npy file')
     parser.add_argument('--data_path', type=str, required=True, help='Path to dataset parquet file')
-    parser.add_argument('--variance_path', type=str, required=True, help='Path to variance.json file')
+    parser.add_argument('--acc_path', type=str, required=True, help='Path to acc.json file')
     parser.add_argument('--output_dir', type=str, default='./analysis_results', help='Directory to save analysis results')
     parser.add_argument('--train_ratio', type=float, default=1.0, help='Ratio of dataset to use, matching main_generation')
     parser.add_argument('--train_ratio_seed', type=int, default=None, help='Random seed for sampling, should match main_generation')
@@ -50,14 +50,14 @@ def main():
     print(f"Embeddings shape after sampling: {embeddings.shape}")
     
     # Step 3: Load variance data
-    print(f"Loading variance data from {args.variance_path}")
-    with open(args.variance_path, 'r') as f:
+    print(f"Loading variance data from {args.acc_path}")
+    with open(args.acc_path, 'r') as f:
         variance_data = json.load(f)
     variances = np.array(variance_data)
         
     assert len(variances) == len(embeddings), "Variance data doesn't match embeddings size"
     
-    print(f"Loaded {len(variances)} variance values")
+    print(f"Loaded {len(variances)} acc values")
     
     # Step 4: Sample pairwise distances and variance differences
     print(f"Sampling {args.n_pairs} pairs for analysis")

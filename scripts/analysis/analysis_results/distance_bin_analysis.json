@@ -1,0 +1,62 @@
+[
+  {
+    "distance_range": "0.00-0.05",
+    "n_samples": 22,
+    "spearman_rho": 0.5764774836865312,
+    "p_value": 0.004980527594559486
+  },
+  {
+    "distance_range": "0.05-0.09",
+    "n_samples": 22,
+    "spearman_rho": -0.11000438306692516,
+    "p_value": 0.6260232402068162
+  },
+  {
+    "distance_range": "0.09-0.14",
+    "n_samples": 301,
+    "spearman_rho": 0.044237903806016186,
+    "p_value": 0.44446212748057745
+  },
+  {
+    "distance_range": "0.14-0.18",
+    "n_samples": 3218,
+    "spearman_rho": 0.02405168835965994,
+    "p_value": 0.17254949446261614
+  },
+  {
+    "distance_range": "0.18-0.23",
+    "n_samples": 12380,
+    "spearman_rho": 0.008880630389499693,
+    "p_value": 0.32313941055776285
+  },
+  {
+    "distance_range": "0.23-0.27",
+    "n_samples": 22811,
+    "spearman_rho": 0.026355407649687183,
+    "p_value": 6.862234689252979e-05
+  },
+  {
+    "distance_range": "0.27-0.32",
+    "n_samples": 17273,
+    "spearman_rho": 0.012325786481074949,
+    "p_value": 0.10525745695472653
+  },
+  {
+    "distance_range": "0.32-0.36",
+    "n_samples": 3668,
+    "spearman_rho": 0.019818646161404933,
+    "p_value": 0.23013718867278632
+  },
+  {
+    "distance_range": "0.36-0.41",
+    "n_samples": 285,
+    "spearman_rho": -0.03351533867799988,
+    "p_value": 0.5731109686666689
+  },
+  {
+    "distance_range": "0.41-0.45",
+    "n_samples": 19,
+    "spearman_rho": -0.050680497089423376,
+    "p_value": 0.836755460298096
+  }
+]
