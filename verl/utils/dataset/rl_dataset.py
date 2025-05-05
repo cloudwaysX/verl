@@ -133,6 +133,7 @@ class RLHFDataset(Dataset):
         # default not store
         self.serialize_dataset = False
         self._download()
+        print("OED", oed)
         self._read_files_and_tokenize(
                 train_ratio, 
                 train_ratio_seed, 
@@ -249,6 +250,8 @@ class RLHFDataset(Dataset):
                 self.dataframe = self.dataframe[1000 : 1000 + size] # compelete from select size from first 1 k
             else:
                 self.dataframe = self.dataframe.head(size)
+        elif oed is None:
+            pass
         else:
             raise ValueError(f"Unsupported oed: {oed}")
 
