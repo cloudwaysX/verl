@@ -7,15 +7,15 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 
 # Set default model path if not provided
 
-MODEL_PATH="https://huggingface.co/google/gemma-3-1b-it"
+MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 
-PROJECT_NAME='openthoughts_8k_gemma1b'
-EXPERIMENT_NAME='deepscaler-1.5b-2k' 
+PROJECT_NAME='openthoughts'
+EXPERIMENT_NAME='1kdeepscaler-1.5b-2k' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_ratio=0.1 \
+    data.train_ratio=0.0125 \
     +data.train_ratio_seed=42 \
     data.train_files=$HOME/data/openr1-math/train.parquet \
     data.val_files=[$HOME/data/aime/test.parquet,$HOME/data/amc/test.parquet,$HOME/data/math/test.parquet,$HOME/data/minerva/test.parquet] \
@@ -41,10 +41,10 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.temperature=0.6 \
-    +actor_rollout_ref.rollout.val_temperature=0.6 \
+    +actor_rollout_ref.rollout.val_temperature=0.0 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
     actor_rollout_ref.rollout.n=8 \
-    +actor_rollout_ref.rollout.n_val=8 \
+    +actor_rollout_ref.rollout.n_val=1 \
     +actor_rollout_ref.rollout.use_edit_for_validation=True \
     +actor_rollout_ref.rollout.use_longer_response_for_validation=True \
     actor_rollout_ref.rollout.force_append_answers=null \
@@ -63,7 +63,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
-    trainer.total_epochs=10 "${@:1}"\
+    trainer.total_epochs=100 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
     reward_model.edit_weight=0.0 \
     active_strategy.selection_metric=null \
