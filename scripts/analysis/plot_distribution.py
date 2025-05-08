@@ -39,46 +39,75 @@ def load_embeddings_from_file(filepath):
         print(f"Error loading embeddings from {filepath}: {e}")
         return None
 
-def reduce_embeddings(embeddings, method='tsne', n_components=2, **kwargs):
+# Make sure you have 'from sklearn.decomposition import PCA' at the top of your script
+
+def reduce_embeddings(embeddings, method='tsne', n_components=2, initial_pca_n_components=None, **kwargs):
     """
     Reduces the dimensionality of the embeddings using the specified method.
+    Can include an optional initial PCA step.
 
     Args:
         embeddings (np.ndarray): The input embeddings (n x k).
-        method (str): The dimensionality reduction method ('tsne', 'umap', or 'pca').
-        n_components (int): The target dimensionality (usually 2 or 3).
+        method (str): The final dimensionality reduction method ('tsne', 'umap', or 'pca').
+        n_components (int): The target dimensionality for the final reduction (usually 2 or 3).
+        initial_pca_n_components (int, optional): If specified and greater than
+                                                  n_components, perform an initial
+                                                  PCA to this many components before
+                                                  applying the main method. Defaults to None.
         **kwargs: Additional parameters for the chosen reduction method
                   (e.g., perplexity for t-SNE, n_neighbors for UMAP).
 
     Returns:
         np.ndarray: The reduced embeddings (n x n_components), or None if method is invalid or an error occurs.
     """
-    print(f"Reducing embeddings using {method} to {n_components} components...")
+    current_embeddings = embeddings
+    original_dim = embeddings.shape[1]
+
+    # Perform initial PCA if requested and if the number of components is less than the original dimensions
+    if initial_pca_n_components is not None and original_dim > initial_pca_n_components:
+         # Also check if initial_pca_n_components makes sense (e.g., > n_components)
+        if initial_pca_n_components >= original_dim or initial_pca_n_components <= n_components:
+             print(f"Warning: initial_pca_n_components ({initial_pca_n_components}) must be less than original dimensions ({original_dim}) and typically greater than final n_components ({n_components}). Skipping initial PCA.")
+        else:
+            print(f"Performing initial PCA to {initial_pca_n_components} components...")
+            try:
+                # Using a fixed random_state for reproducibility
+                pca_initial = PCA(n_components=initial_pca_n_components, random_state=42)
+                current_embeddings = pca_initial.fit_transform(embeddings)
+                print(f"Initial PCA complete. Embeddings shape: {current_embeddings.shape}")
+            except Exception as e:
+                print(f"Error during initial PCA: {e}")
+                return None
+
+
+    print(f"Performing final reduction using {method} to {n_components} components...")
     try:
         if method == 'tsne':
             # Set a default random_state for reproducibility
+            # Note: TSNE's result can still vary due to its nature
             tsne = TSNE(n_components=n_components, random_state=42, **kwargs)
-            reduced_embeddings = tsne.fit_transform(embeddings)
+            reduced_embeddings = tsne.fit_transform(current_embeddings)
         elif method == 'umap':
-            if umap is None:
-                print("UMAP library not found. Please install 'umap-learn'.")
-                return None
+            # Make sure you have imported umap and it's not None
+            if 'umap' not in globals() or umap is None:
+                 print("UMAP library not found. Please install 'umap-learn'.")
+                 return None
             # Set a default random_state for reproducibility
             reducer = umap.UMAP(n_components=n_components, random_state=42, **kwargs)
-            reduced_embeddings = reducer.fit_transform(embeddings)
+            reduced_embeddings = reducer.fit_transform(current_embeddings)
         elif method == 'pca':
              # Set a default random_state for reproducibility
-            pca = PCA(n_components=n_components, random_state=42, **kwargs)
-            reduced_embeddings = pca.fit_transform(embeddings)
+            pca_final = PCA(n_components=n_components, random_state=42)
+            reduced_embeddings = pca_final.fit_transform(current_embeddings)
         else:
-            print(f"Unknown method: {method}. Choose 'tsne', 'umap', or 'pca'.")
+            print(f"Unknown final method: {method}. Choose 'tsne', 'umap', or 'pca'.")
             return None
     except Exception as e:
-        print(f"Error during dimensionality reduction with {method}: {e}")
+        print(f"Error during final dimensionality reduction with {method}: {e}")
         return None
 
 
-    print("Reduction complete.")
+    print("Final reduction complete.")
     return reduced_embeddings
 
 def plot_reduced_embeddings_seaborn(reduced_embeddings, title="2D Visualization of Embeddings", output_path=None):
@@ -174,7 +203,18 @@ if __name__ == "__main__":
         default=30.0,
         help='Perplexity for t-SNE (only applies when method is tsne, default: 30.0)'
     )
+    # Add the new argument for initial PCA here
+    parser.add_argument(
+        '--initial_pca_n_components',
+        type=int,
+        help='Optional: Number of components for an initial PCA step before the main reduction.'
+    )
     # Add more arguments for other method parameters if needed (e.g., n_neighbors for UMAP)
+
+
+    args = parser.parse_args()
+
+    # ... rest of the main block ...
 
     args = parser.parse_args()
 
