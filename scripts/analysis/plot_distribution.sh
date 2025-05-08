@@ -19,7 +19,7 @@ EMBEDDING_FILENAME="embeddings.npy"
 OUTPUT_PLOT_FILENAME="tsne_2d_visualization.png" # You can change this filename
 
 # Define the path to your Python script
-PYTHON_SCRIPT="./visualize_embeddings.py" # Adjust if your script is elsewhere
+PYTHON_SCRIPT="./plot_distribution.py" # Adjust if your script is elsewhere
 
 # Define the dimensionality reduction parameters (you can change these)
 DR_METHOD="tsne"

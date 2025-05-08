@@ -55,15 +55,6 @@ def main():
         acc_data = json.load(f)
     accs = np.array(acc_data)
 
-    # IMPORTANT: If dataset was sampled, make sure accs is also sampled the same way
-    if args.train_ratio < 1:
-         if args.train_ratio_seed is not None:
-            # The indices for sampling embeddings were already determined, reuse them
-            accs = accs[indices]
-         else:
-            # If sampling is just the first 'size' elements
-            accs = accs[:embeddings.shape[0]] # Sample accs to match sampled embeddings size
-
     assert len(accs) == len(embeddings), "Acc data doesn't match embeddings size after sampling"
 
     print(f"Loaded {len(accs)} acc values, matching sampled embeddings size")
@@ -109,7 +100,7 @@ def main():
     # Additional analysis 1: Check correlation at different distance ranges
     print("\nAnalyzing correlation at different embedding distance ranges...") # Added newline and clarified print
 
-    n_bins = 10
+    n_bins = 3
     dist_bins = np.linspace(np.min(dists), np.max(dists), n_bins+1)
 
     distance_bin_results = [] # Changed variable name
@@ -134,7 +125,7 @@ def main():
     # Additional analysis 2: Check correlation at different acc difference ranges
     print("\nAnalyzing correlation at different acc difference ranges...") # Added newline and clarified print
 
-    # n_bins = 10 # n_bins can be reused or set separately if needed
+    n_bins = 2 # n_bins can be reused or set separately if needed
     acc_diff_bins = np.linspace(np.min(delta_a), np.max(delta_a), n_bins+1)
 
     acc_diff_bin_results = [] # Changed variable name

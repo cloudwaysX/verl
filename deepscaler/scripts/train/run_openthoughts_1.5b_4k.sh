@@ -8,25 +8,21 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 # Set default model path if not provided
 
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
-MODEL_NAME="DeepSeek-R1-Distill-Qwen-1.5B"
 
-PROJECT_NAME='deepscaler_oed'
-EMBEDMODEL_NAME='e5-mistral-7b-instruct'
-#EMBEDMODEL_NAME='gecko_en_1b_tpu'
-EXPERIMENT_NAME="4kdeepscaler-1.5b-4k_Rcoreset_${EMBEDMODEL_NAME}" 
+PROJECT_NAME='openthoughts'
+EXPERIMENT_NAME='1kdeepscaler-1.5b-3k' 
 
 # Train over a single node, 8 A100-80GB GPUs.
-#21504
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_ratio=0.1 \
-    +data.train_ratio_seed=null \
-    data.train_files=$HOME/data/deepscaler/train.parquet \
+    data.train_ratio=0.0125 \
+    +data.train_ratio_seed=42 \
+    data.train_files=$HOME/data/openr1-math/train.parquet \
     data.val_files=[$HOME/data/aime/test.parquet,$HOME/data/amc/test.parquet,$HOME/data/math/test.parquet,$HOME/data/minerva/test.parquet] \
     data.train_batch_size=128 \
     data.val_batch_size=512 \
     data.max_prompt_length=1024 \
-    data.max_response_length=4096 \
+    data.max_response_length=3072 \
     actor_rollout_ref.model.path=$MODEL_PATH \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -37,6 +33,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
+    actor_rollout_ref.actor.clip_ratio=0.2 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     +actor_rollout_ref.actor.fsdp_config.grad_offload=False \
@@ -51,6 +48,7 @@ python3 -m verl.trainer.main_ppo \
     +actor_rollout_ref.rollout.use_edit_for_validation=True \
     +actor_rollout_ref.rollout.use_longer_response_for_validation=True \
     actor_rollout_ref.rollout.force_append_answers=null \
+    +actor_rollout_ref.rollout.forceans_for_untruncated=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=8192 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.kl_ctrl.kl_coef=0.001 \
@@ -65,15 +63,8 @@ python3 -m verl.trainer.main_ppo \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
-    trainer.total_epochs=80 "${@:1}"\
+    trainer.total_epochs=100 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
+    reward_model.edit_weight=0.0 \
     active_strategy.selection_metric=null \
-    active_strategy.strategy_type=null\
-    active_strategy.greedy_exploration_ratio=0.0\
-    active_strategy.greedy_top_percent=0 \
-    active_strategy.oed="reverse_coreset" \
-    +data.embedding_path="/mnt/disk3/verl/embedding/deepscaler/${EMBEDMODEL_NAME}/embeddings.npy" \
-    +active_strategy.coreset_idx_path="${HOME}/verl/results/deepscaler/${EMBEDMODEL_NAME}/oed_${MODEL_NAME}_\${data.max_prompt_length}"
-    # +active_strategy.coreset_idx_path="${HOME}/verl/results/deepscaler/${EMBEDMODEL_NAME}/trainmodel_agnostic"
-    # +active_strategy.coreset_idx_path="${HOME}/verl/results/deepscaler/${EMBEDMODEL_NAME}/oed_${MODEL_NAME}_\${data.max_prompt_length}"
-
+    active_strategy.strategy_type=null

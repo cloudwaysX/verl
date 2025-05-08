@@ -5,7 +5,8 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 # Default values
 MODEL_PATH="intfloat/e5-mistral-7b-instruct"
 DATASET_NAME='openr1-math'
-MODEL_NAME="e5-mistral-7b-instruct" 
+# MODEL_NAME="e5-mistral-7b-instruct"
+MODEL_NAME="google/Gemma-Embeddings-v1.0" 
 OUTPUT_DIR="/mnt/disk3/verl/embedding/${DATASET_NAME}/${MODEL_NAME}"
 
 

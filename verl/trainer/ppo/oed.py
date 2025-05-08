@@ -37,7 +37,7 @@ def coreset_selection(embeddings: np.ndarray,
         return selected_idxs
       
     if mode == "cpu":
-        ordered_idxs = corset_selection_cpu(embeddings, len(embeddings)//2, random_seed)
+        ordered_idxs = corset_selection_cpu(embeddings, len(embeddings)//8, random_seed)
     else:
         raise ValueError(f"Unsupported mode: {mode}")
     np.save(cache_file, ordered_idxs)
