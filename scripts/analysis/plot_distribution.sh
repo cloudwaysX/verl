@@ -7,7 +7,7 @@ OUTPUT_BASE_DIR="$HOME/verl/results" # Use $HOME for your home directory
 # Define the specific embedding subdirectories
 # Make sure these paths relative to INPUT_BASE_DIR lead to the embeddings.npy file's parent directory
 EMBEDDING_SUBDIRS=(
-    "deepscaler/e5-mistral-7b-instruct"
+    # "deepscaler/e5-mistral-7b-instruct"
     "openr1-math/e5-mistral-7b-instruct"
 )
 
@@ -15,7 +15,7 @@ EMBEDDING_SUBDIRS=(
 EMBEDDING_FILENAME="embeddings.npy"
 
 # Define the path to your Python script
-PYTHON_SCRIPT="./visualize_embeddings.py" # Adjust if your script is elsewhere
+PYTHON_SCRIPT="./plot_distribution.py" # Adjust if your script is elsewhere
 
 # Define the dimensionality reduction parameters
 DR_METHOD="tsne"         # We are sweeping perplexity for t-SNE
