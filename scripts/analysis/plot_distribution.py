@@ -6,13 +6,8 @@ import pandas as pd
 import seaborn as sns
 import argparse
 import os
+import umap
 
-# Optional: Import UMAP if you have it installed
-# try:
-#     import umap
-# except ImportError:
-#     umap = None
-#     print("UMAP not installed. Install with 'pip install umap-learn' to use it.")
 
 
 def load_embeddings_from_file(filepath):
@@ -203,6 +198,19 @@ if __name__ == "__main__":
         default=30.0,
         help='Perplexity for t-SNE (only applies when method is tsne, default: 30.0)'
     )
+    
+    parser.add_argument(
+        '--n_neighbors',
+        type=int,
+        default=15, # Common default for UMAP
+        help='Number of neighbors for UMAP (only applies when method is umap, default: 15)'
+    )
+    parser.add_argument(
+        '--min_dist',
+        type=float,
+        default=0.1, # Common default for UMAP
+        help='Minimum distance for UMAP (only applies when method is umap, default: 0.1)'
+    )
     # Add the new argument for initial PCA here
     parser.add_argument(
         '--initial_pca_n_components',
@@ -227,8 +235,10 @@ if __name__ == "__main__":
         if args.method == 'tsne':
             reduction_kwargs['perplexity'] = args.perplexity
             # Add other t-SNE specific args here if you add them to the parser
-        # elif args.method == 'umap' and umap is not None:
-            # Add UMAP specific args here if you add them to the parser
+        elif args.method == 'umap': # <-- Add this elif block
+              reduction_kwargs['n_neighbors'] = args.n_neighbors
+              reduction_kwargs['min_dist'] = args.min_dist
+              # Add other UMAP specific args here if you add them to the parser
 
         reduced_embeddings = reduce_embeddings(
             my_embeddings,
