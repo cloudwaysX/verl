@@ -163,13 +163,17 @@ class RLHFDataset(Dataset):
         
         # optionally load embeddings (must align 1:1 with df rows)
         if oed in ["coreset", "reverse_coreset", "reverse_coreset_initsize100"]:
-            if embedding_path:
+            try:
                 embeddings = np.load(embedding_path)
                 assert embeddings.shape[0] == len(dfs), (
                     f"Embeddings length {embeddings.shape[0]} != #samples {len(dfs)}"
                 )
-            else:
-                raise ValueError("No embedding path provided for coreset oed")
+            except Exception as e:
+                print(f"Failed to load embeddings: {e}")
+                if oed_save_path is None:
+                    raise ValueError("No embedding path provided for coreset oed")
+                else:
+                    embeddings = None
         else:
             embeddings = None
 
