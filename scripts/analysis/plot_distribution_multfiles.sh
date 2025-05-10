@@ -10,7 +10,7 @@ INPUT_PATH2="/mnt/disk3/verl/embedding/openr1-math/e5-mistral-7b-instruct/embedd
 OUTPUT_BASE_DIR="$HOME/verl/results/combined_plots"
 
 # --- Define the path to your Python script ---
-PYTHON_SCRIPT="./plot_distribution_multifiles.py" # Make sure this is the correct script name and path
+PYTHON_SCRIPT="./plot_distribution_multfiles.py" # Make sure this is the correct script name and path
 
 # --- Dimensionality Reduction Method and Components ---
 DR_METHOD="umap"          # Set to 'umap' for UMAP sweep, or 'tsne' for t-SNE sweep
@@ -23,8 +23,10 @@ INITIAL_PCA_COMPONENTS=256 # Or 50, 100, etc. Experiment with this.
 
 # --- Define parameters for UMAP sweep ---
 # These will be used if DR_METHOD is 'umap'
-UMAP_N_NEIGHBORS_VALUES=(15 30 50 100) # Add or remove values as needed for n_neighbors
-UMAP_MIN_DIST_VALUES=(0.0 0.1 0.25 0.5)  # Add or remove values as needed for min_dist
+# UMAP_N_NEIGHBORS_VALUES=(15 30 50 100) # Add or remove values as needed for n_neighbors
+UMAP_N_NEIGHBORS_VALUES=(15)
+# UMAP_MIN_DIST_VALUES=(0.0 0.1 0.25 0.5)  # Add or remove values as needed for min_dist
+UMAP_MIN_DIST_VALUES=(0.0)  # Add or remove values as needed for min_dist
 
 # --- Define parameters for t-SNE sweep (if you switch DR_METHOD to 'tsne') ---
 # These will be used if DR_METHOD is 'tsne'

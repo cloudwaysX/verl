@@ -106,13 +106,17 @@ def reduce_embeddings(embeddings, method='tsne', n_components=2, initial_pca_n_c
     print("Final reduction complete.")
     return reduced_embeddings
 
-def plot_combined_embeddings_seaborn(reduced_embeddings1, reduced_embeddings2, title="Combined 2D Visualization", output_path=None):
+# Make sure pandas (as pd) and os are imported at the top
+
+def plot_combined_embeddings_seaborn(reduced_embeddings1, reduced_embeddings2, dataset1_name="Dataset 1", dataset2_name="Dataset 2", title="Combined 2D Visualization", output_path=None):
     """
-    Plots the combined 2D reduced embeddings using Seaborn, color-coded, and saves or displays it.
+    Plots the combined 2D reduced embeddings using Seaborn, color-coded with custom names.
 
     Args:
         reduced_embeddings1 (np.ndarray): The reduced embeddings for the first dataset (n1 x 2).
         reduced_embeddings2 (np.ndarray): The reduced embeddings for the second dataset (n2 x 2).
+        dataset1_name (str): The name for the first dataset in the legend.
+        dataset2_name (str): The name for the second dataset in the legend.
         title (str): The title for the plot.
         output_path (str, optional): The path to save the plot image. If None,
                                      the plot is displayed.
@@ -130,9 +134,9 @@ def plot_combined_embeddings_seaborn(reduced_embeddings1, reduced_embeddings2, t
     plt.figure(figsize=(10, 8))
 
     df1 = pd.DataFrame(reduced_embeddings1, columns=['Component 1', 'Component 2'])
-    df1['Dataset'] = 'Dataset 1'  # Add a column to identify the dataset
+    df1['Dataset'] = dataset1_name  # Use the provided name
     df2 = pd.DataFrame(reduced_embeddings2, columns=['Component 1', 'Component 2'])
-    df2['Dataset'] = 'Dataset 2'
+    df2['Dataset'] = dataset2_name  # Use the provided name
     df = pd.concat([df1, df2]) # Combine the dataframes
 
     sns.scatterplot(
@@ -149,7 +153,12 @@ def plot_combined_embeddings_seaborn(reduced_embeddings1, reduced_embeddings2, t
     plt.grid(True)
 
     if output_path:
+        # ... (save logic remains the same) ...
         try:
+            output_dir = os.path.dirname(output_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+                print(f"Created output directory: {output_dir}")
             plt.savefig(output_path, bbox_inches='tight')
             print(f"Combined plot saved to {output_path}")
         except Exception as e:
@@ -157,7 +166,7 @@ def plot_combined_embeddings_seaborn(reduced_embeddings1, reduced_embeddings2, t
     else:
         plt.show()
 
-    plt.close()  # Close the plot figure after displaying or saving
+    plt.close() # Close the plot figure
     print("Combined plotting routine finished.")
 
 
@@ -220,13 +229,69 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    
+    # Add a helper function to extract the name from the path
+    def extract_dataset_name_from_path(filepath, marker="/embedding/"):
+        """
+        Extracts the part of the path after the marker, excluding the filename.
+        Assumes a structure like /path/to/marker/name/filename.npy
+        """
+        try:
+            marker_index = filepath.rfind(marker) # Use rfind in case 'embedding' appears earlier
+            if marker_index == -1:
+                print(f"Warning: Marker '{marker}' not found in path: {filepath}. Using full path.")
+                return filepath
+            # Get the part of the path after the marker
+            name_with_filename = filepath[marker_index + len(marker):]
+            # Remove the filename
+            name = os.path.dirname(name_with_filename)
+            if not name: # If os.path.dirname is empty, maybe the filename is right after the marker
+                name = name_with_filename # In this case, maybe the filename is the name? Or handle as error?
+                # Let's refine: find the last '/' before the filename to split
+                last_slash_index = name_with_filename.rfind('/')
+                if last_slash_index != -1:
+                    name = name_with_filename[:last_slash_index] # Take everything before the last slash
+
+            if not name: # If still no name, fall back
+                print(f"Warning: Could not extract meaningful name from path: {filepath}. Using default.")
+                return os.path.basename(filepath) # Fallback to filename
+
+            return name
+        except Exception as e:
+            print(f"Error extracting name from path {filepath}: {e}. Using default.")
+            return filepath # Fallback on error
 
     # 1. Load your embeddings from the specified input paths
     embeddings1 = load_embeddings_from_file(args.input_path1)
     embeddings2 = load_embeddings_from_file(args.input_path2)
 
     if embeddings1 is not None and embeddings2 is not None:
+        # --- Extract dataset names from input paths ---
+        dataset1_name = extract_dataset_name_from_path(args.input_path1, marker="/embedding/")
+        dataset2_name = extract_dataset_name_from_path(args.input_path2, marker="/embedding/")
+
+        print(f"Identified Dataset 1 as: {dataset1_name}")
+        print(f"Identified Dataset 2 as: {dataset2_name}")
         # 2. Combine the embeddings *before* dimensionality reduction
+        # --- Add the uniform sampling code here ---
+        n1 = embeddings1.shape[0]
+        n2 = embeddings2.shape[0]
+        sample_size = min(n1, n2)//2 # Determine the size of the smallest dataset
+
+        print(f"Dataset 1 size: {n1}")
+        print(f"Dataset 2 size: {n2}")
+        print(f"Sampling {sample_size} samples from each dataset for comparison.")
+
+        # Set a random seed for reproducible sampling
+        np.random.seed(42)
+
+        # Get random indices for sampling without replacement
+        sample_indices1 = np.random.choice(n1, sample_size, replace=False)
+        sample_indices2 = np.random.choice(n2, sample_size, replace=False)
+
+        # Get the sampled embeddings
+        embeddings1 = embeddings1[sample_indices1]
+        embeddings2 = embeddings2[sample_indices2]
         combined_embeddings = np.concatenate((embeddings1, embeddings2), axis=0)
 
         # 3. Reduce dimensionality using the chosen method and parameters
@@ -248,13 +313,15 @@ if __name__ == "__main__":
         # 4. Split the reduced embeddings back into two groups for plotting
         if reduced_embeddings is not None:
             n1 = embeddings1.shape[0]  # Number of samples in the first dataset
-            reduced_embeddings1 = reduced_embeddings[:n1]
-            reduced_embeddings2 = reduced_embeddings[n1:]
+            reduced_embeddings1 = reduced_embeddings[:sample_size]
+            reduced_embeddings2 = reduced_embeddings[sample_size:]
 
             # 5. Plot the combined reduced embeddings and save or display
             plot_combined_embeddings_seaborn(
                 reduced_embeddings1,
                 reduced_embeddings2,
-                title=f'{args.method.upper()} Visualization ({args.n_components}D) - Combined Datasets',
+                dataset1_name=dataset1_name,  # <-- Pass the extracted name
+                dataset2_name=dataset2_name,  # <-- Pass the extracted name
+                title=f'{args.method.upper()} Visualization ({args.n_components}D) - {dataset1_name} vs {dataset2_name}', # Optional: Use names in title
                 output_path=args.output_path
             )
