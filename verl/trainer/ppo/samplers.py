@@ -18,7 +18,8 @@ class ScoreOrderedSampler(Sampler):
                  resume=False,
                  shuffled=False,
                  dynamic_threshold=False,
-                 dynamaic_threshold_params=None):
+                 dynamaic_threshold_params=None,
+                 min_iter_size=0):
         """
         A sampler that yields indices ordered by score after the first iteration.
         First iteration uses the provided base_sampler if available.
@@ -43,6 +44,7 @@ class ScoreOrderedSampler(Sampler):
         self.dynamic_threshold = dynamic_threshold
         self.dynamaic_threshold_params = dynamaic_threshold_params
         self.resume = resume
+        self.min_iter_size = min_iter_size
         
         print(f"ScoreOrderedSampler: score_threshold={self.score_threshold}, "
               f"greedy_exploration_ratio={self.greedy_exploration_ratio}, "
@@ -84,7 +86,9 @@ class ScoreOrderedSampler(Sampler):
         if self.score_threshold is None:
             # No threshold, include all indices
             if self.size_threshold is not None:
-                sorted_indices = sorted_indices[:int(self.size_threshold*len(sorted_indices))]
+                tmp = min(self.size_threshold,
+                          int(self.size_threshold*len(sorted_indices)))
+                sorted_indices = sorted_indices[:tmp]
             return sorted_indices
 
         # Find the split point (first index below threshold)
@@ -125,6 +129,9 @@ class ScoreOrderedSampler(Sampler):
         included_indices.sort(key=lambda idx: idx_to_score[idx], reverse=self.descending)
         # Here we do not sort the exploration samples, so they will be in random order
         included_indices = included_indices + exploration_samples
+        if len(included_indices) < self.min_iter_size:
+            print(f"Not enough samples, adding {self.min_iter_size - len(included_indices)} random samples")
+            included_indices = included_indices + random.sample(outside_threshold, self.min_iter_size - len(included_indices))
         
         return included_indices
 

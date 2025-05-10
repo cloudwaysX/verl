@@ -678,7 +678,8 @@ class RayPPOTrainer(object):
                 descending=True,
                 resume=self.config.active_strategy.get("resume_sampler", False), # TODO: can be more automatic
                 dynamic_threshold=self.config.active_strategy.strategy_type == "fixorderdynamic",
-                dynamaic_threshold_params=self.config.active_strategy.get("dynamaic_threshold_params", None)
+                dynamaic_threshold_params=self.config.active_strategy.get("dynamaic_threshold_params", None),
+                min_iter_size=self.config.data.train_batch_size
             )
         else:
             self.sampler = base_sampler
