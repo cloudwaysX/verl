@@ -72,4 +72,4 @@ python3 -m verl.trainer.main_ppo \
     active_strategy.strategy_type=null \
     active_strategy.oed="coreset" \
     +data.embedding_path="/mnt/disk3/verl/embedding/openr1-math/${EMBEDMODEL_NAME}/embeddings.npy" \
-    +active_strategy.coreset_idx_path="${HOME}/verl/results/deepscaler/${EMBEDMODEL_NAME}/oed_${MODEL_NAME}_\${data.max_prompt_length}"
+    +active_strategy.coreset_idx_path="${HOME}/verl/results/openr1-math/${EMBEDMODEL_NAME}/oed_${MODEL_NAME}_\${data.max_prompt_length}"

@@ -76,6 +76,7 @@ python3 -m verl.trainer.main_ppo \
     +active_strategy.shufflefixorder=False \
     active_strategy.greedy_top_percent=0 \
     +active_strategy.size_threshold=0 \
+    +active_strategy.resume_sampler=True \
     active_strategy.score_threshold=[0.5,100] \
     active_strategy.oed="coreset" \
     +data.embedding_path="/mnt/disk3/verl/embedding/openr1-math/${EMBEDMODEL_NAME}/embeddings.npy" \
