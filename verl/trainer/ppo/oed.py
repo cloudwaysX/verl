@@ -23,11 +23,11 @@ def coreset_selection(embeddings: np.ndarray,
         selected_idxs: list of length `size` with the indices of the selected embeddings
     """
     
-    os.makedirs(os.path.dirname(oed_save_path), exist_ok=True)
+    os.makedirs(oed_save_path, exist_ok=True)
     if random_seed is None:
-        cache_file = os.path.join(os.path.dirname(oed_save_path), 'orderd_coreset_idxs.npy')
+        cache_file = os.path.join(oed_save_path, 'orderd_coreset_idxs.npy')
     else:
-        cache_file = os.path.join(os.path.dirname(oed_save_path), f'orderd_coreset_idxs_{random_seed}.npy')
+        cache_file = os.path.join(oed_save_path, f'orderd_coreset_idxs_{random_seed}.npy')
     if os.path.exists(cache_file):
         print(f"Loading coreset selection from {cache_file}")
         # Because the order is deterministic, we can just compute the selection once and save it.
@@ -35,6 +35,8 @@ def coreset_selection(embeddings: np.ndarray,
         selected_idxs = ordered_idxs[:size]
         print(f"The first 100 selected ids are: {selected_idxs[:100]}")
         return selected_idxs
+    else:
+       print(f"No {cache_file} exists. Create a new one !!!!!!!!!!!!")
       
     if mode == "cpu":
         ordered_idxs = corset_selection_cpu(embeddings, len(embeddings)//8, random_seed)

@@ -10,7 +10,7 @@ INPUT_PATH2="/mnt/disk3/verl/embedding/openr1-math/e5-mistral-7b-instruct/embedd
 OUTPUT_BASE_DIR="$HOME/verl/results/combined_plots"
 
 # --- Define the path to your Python script ---
-PYTHON_SCRIPT="./plot_distribution_multfiles.py" # Make sure this is the correct script name and path
+PYTHON_SCRIPT="./plot_distribution_multifiles.py" # Make sure this is the correct script name and path
 
 # --- Dimensionality Reduction Method and Components ---
 DR_METHOD="umap"          # Set to 'umap' for UMAP sweep, or 'tsne' for t-SNE sweep

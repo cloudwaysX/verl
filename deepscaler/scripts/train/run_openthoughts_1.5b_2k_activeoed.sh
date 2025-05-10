@@ -65,7 +65,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
-    trainer.total_epochs=100 "${@:1}"\
+    trainer.total_epochs=300 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
     reward_model.edit_weight=0.0 \
     active_strategy.selection_metric=null \
@@ -80,4 +80,4 @@ python3 -m verl.trainer.main_ppo \
     active_strategy.score_threshold=[0.5,100] \
     active_strategy.oed="coreset" \
     +data.embedding_path="/mnt/disk3/verl/embedding/openr1-math/${EMBEDMODEL_NAME}/embeddings.npy" \
-    +active_strategy.coreset_idx_path="${HOME}/verl/results/deepscaler/${EMBEDMODEL_NAME}/oed_${MODEL_NAME}_\${data.max_prompt_length}"
+    +active_strategy.coreset_idx_path="${HOME}/verl/results/openr1-math/${EMBEDMODEL_NAME}/oed_${MODEL_NAME}_\${data.max_prompt_length}"
