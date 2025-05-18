@@ -48,7 +48,6 @@ from verl.trainer.ppo.samplers import GreedyBatchSampler, ScoreOrderedSampler
 
 WorkerType = Type[Worker]
 
-
 class Role(Enum):
     """
     To create more roles dynamically, you can subclass Role and add new members
@@ -590,6 +589,7 @@ class RayPPOTrainer(object):
                                          train_ratio = self.config.data.train_ratio,
                                          train_ratio_seed=self.config.data.get('train_ratio_seed', None),
                                          oed=self.config.active_strategy.oed,
+                                         topic_scope=self.config.active_strategy.get("topic_scope", None),
                                          embedding_path=self.config.data.get("embedding_path", None),
                                          oed_save_path=self.config.active_strategy.get("coreset_idx_path", oed_save_path))
         # use sampler for better ckpt resume

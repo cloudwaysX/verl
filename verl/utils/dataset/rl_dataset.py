@@ -98,6 +98,7 @@ class RLHFDataset(Dataset):
                  train_ratio_seed=None,
                  embedding_path: str = None,
                  oed: Optional[str] = None,
+                 topic_scope: Optional[str] = None,
                  oed_save_path: Optional[str] = None):
         """
         oed:
@@ -139,6 +140,7 @@ class RLHFDataset(Dataset):
                 train_ratio_seed, 
                 embedding_path,
                 oed,
+                topic_scope,
                 oed_save_path)
         self._set_all_prompt_ids()
 
@@ -153,6 +155,7 @@ class RLHFDataset(Dataset):
                                  train_ratio_seed=None, 
                                  embedding_path=None,
                                  oed="random",
+                                 topic_scope=None,
                                  oed_save_path=None):
         dfs = []
         for parquet_file in self.parquet_files:
@@ -198,7 +201,10 @@ class RLHFDataset(Dataset):
         size = int(len(self.dataframe)*train_ratio)
             
         if oed in ["balance_by_ability"]:
-            self.dataframe = balance_dataset_by_ability(self.dataframe, size, train_ratio_seed)
+            self.dataframe = balance_dataset_by_ability(self.dataframe, 
+                                                        size, 
+                                                        ability_scope=topic_scope, 
+                                                        random_seed=train_ratio_seed)
         elif oed in ['math_difficulty']:
             self.dataframe = selection_for_math_difficulty(self.dataframe)
         elif oed in ["mathamc_difficulty"]:

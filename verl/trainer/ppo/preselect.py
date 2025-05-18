@@ -40,65 +40,119 @@ def selection_for_openthoughts_difficulty(dataframe, lower_bound=4, upper_bound=
     return dataframe[selected_rows]
 
 # Add balance function
-def balance_dataset_by_ability(df, budget_n, random_seed=42):
+import pandas as pd
+import numpy as np
+
+def balance_dataset_by_ability(df, budget_n, ability_scope=None, random_seed=42):
     """
-    Filter a dataframe to include a balanced number of examples across different ability topics.
-    
+    Filter a dataframe to include a balanced number of examples across a specified
+    subset of ability topics, optionally filtering by a list of allowed abilities first.
+
     Args:
-        df (pd.DataFrame): The input dataframe containing a column 'ability'
-        budget_n (int): The total number of examples to include in the filtered dataframe
-        random_seed (int): Random seed for reproducibility
-    
+        df (pd.DataFrame): The input dataframe containing a column 'ability'.
+        budget_n (int): The total number of examples to include in the filtered dataframe.
+                        This budget applies *after* filtering by ability_scope.
+        ability_scope (list, optional): A list of ability names (strings). If provided,
+                                        only examples where the 'ability' column's value
+                                        is in this list will be considered for balancing.
+                                        Defaults to None, meaning all abilities in the
+                                        original DataFrame are considered.
+        random_seed (int): Random seed for reproducibility.
+
     Returns:
-        pd.DataFrame: A filtered dataframe with approximately balanced examples across ability topics
+        pd.DataFrame: A filtered dataframe with approximately balanced examples across
+                      the abilities included in the ability_scope (if any), up to budget_n.
     """
-    
+
     # Ensure reproducibility
     if random_seed is not None:
       np.random.seed(random_seed)
-    
-    # Count the occurrences of each ability
-    ability_counts = df['ability'].value_counts()
-    print(f"Original ability distribution:\n{ability_counts}")
-    print(f"Number of unique abilities: {len(ability_counts)}")
-    
-    # Calculate the ideal number of examples per ability
-    examples_per_ability = budget_n // len(ability_counts)
-    remaining = budget_n % len(ability_counts)
-    
-    print(f"Target: {examples_per_ability} examples per ability, with {remaining} extra examples distributed")
-    
+
+    # --- New: Filter by ability_scope if provided ---
+    working_df = df.copy() # Work on a copy to not modify the original dataframe
+
+    if ability_scope is not None:
+        if 'ability' not in working_df.columns:
+             raise ValueError("DataFrame must contain an 'ability' column.")
+        original_len = len(working_df)
+        working_df = working_df[working_df['ability'].isin(ability_scope)].copy()
+        print(f"Filtered down to {len(working_df)} examples within ability scope: {ability_scope} (from {original_len})")
+        if len(working_df) == 0:
+            print("No examples remaining after filtering by ability_scope. Returning empty DataFrame.")
+            # Return an empty DataFrame with the same columns as the original df
+            return pd.DataFrame(columns=df.columns)
+    # --- End New ---
+
+    # Count the occurrences of each ability in the (potentially filtered) dataframe
+    # Only consider abilities present in the working_df
+    ability_counts = working_df['ability'].value_counts()
+
+    print(f"Ability distribution (after ability scope filter if applied):\n{ability_counts}")
+    print(f"Number of unique abilities in scope: {len(ability_counts)}")
+
+    # Handle case where budget_n is larger than the available examples after filtering
+    if budget_n > len(working_df):
+        print(f"Warning: budget_n ({budget_n}) is larger than the available examples within the ability scope ({len(working_df)}). Returning all available examples.")
+        return working_df.copy() # Return all filtered examples if budget exceeds available
+
+    # Calculate the ideal number of examples per ability within the filtered set
+    num_abilities_in_scope = len(ability_counts)
+    if num_abilities_in_scope == 0:
+        print("No abilities found in the dataset after filtering by ability_scope. Returning empty DataFrame.")
+        return pd.DataFrame(columns=df.columns) # Return empty if no abilities are left
+
+    examples_per_ability = budget_n // num_abilities_in_scope
+    remaining = budget_n % num_abilities_in_scope
+
+    print(f"Target: {examples_per_ability} examples per ability, with {remaining} extra examples distributed among abilities in scope")
+
     # Initialize the list to store selected indices
     selected_indices = []
-    
-    # Sort abilities by count to allocate extra examples to the least common abilities
-    sorted_abilities = ability_counts.sort_values().index.tolist()
-    
-    # Allocate the examples for each ability
-    for i, ability in enumerate(sorted_abilities):
-        # Get all indices for this ability
-        ability_indices = df[df['ability'] == ability].index.tolist()
-        
+
+    # Sort abilities by count (ascending) to allocate extra examples to the least common abilities first within the scope
+    # Use ability_counts.index as these are the abilities present in the working_df and within scope
+    sorted_abilities_in_scope = ability_counts.sort_values().index.tolist()
+
+    # Allocate the examples for each ability within the scope
+    # Iterate through sorted abilities and add extra examples to the first 'remaining' abilities
+    for i, ability in enumerate(sorted_abilities_in_scope):
+        # Get all indices for this ability from the working_df
+        ability_indices = working_df[working_df['ability'] == ability].index.tolist()
+
         # Determine how many examples to take for this ability
-        # Add an extra example for the least common abilities if there are remaining examples
+        # Add an extra example for the abilities that come first in the sorted list (least common)
         target_count = examples_per_ability + (1 if i < remaining else 0)
-        
+
         # If we don't have enough examples for this ability, take all available
         if len(ability_indices) <= target_count:
             selected_indices.extend(ability_indices)
-            print(f"Taking all {len(ability_indices)} examples for ability '{ability}'")
+            print(f"Taking all {len(ability_indices)} examples for ability '{ability}' (within scope)")
         else:
             # Randomly sample the required number of examples
-            sampled_indices = np.random.choice(ability_indices, target_count, replace=False)
+            # Ensure we don't sample more than available indices
+            sample_count = min(target_count, len(ability_indices))
+            sampled_indices = np.random.choice(ability_indices, sample_count, replace=False)
             selected_indices.extend(sampled_indices)
-            print(f"Sampled {target_count} examples for ability '{ability}' (from {len(ability_indices)} available)")
-    
-    # Create the balanced dataframe
+            print(f"Sampled {sample_count} examples for ability '{ability}' (within scope, from {len(ability_indices)} available, target was {target_count})")
+
+    # Create the balanced dataframe using indices from the original dataframe for safety
+    # (though indices from working_df should also be valid in the original df)
     balanced_df = df.loc[selected_indices].copy()
-    
+
     # Print statistics about the balanced dataset
-    print("\nBalanced ability distribution:")
-    print(balanced_df['ability'].value_counts())
+    print("\nBalanced ability distribution (within scope):")
+    if not balanced_df.empty:
+        print(balanced_df['ability'].value_counts())
+    else:
+        print("Balanced DataFrame is empty.")
     print(f"Total examples in balanced dataset: {len(balanced_df)}")
-    
+
+    # Verify the total number of examples is close to budget_n, accounting for cases
+    # where available examples were less than budget_n
+    if len(balanced_df) != budget_n and len(working_df) >= budget_n:
+         print(f"Warning: Final dataset size ({len(balanced_df)}) does not match budget_n ({budget_n}). This can happen if some abilities within the scope had fewer examples than the target count per ability.")
+    elif len(balanced_df) != len(working_df) and len(working_df) < budget_n:
+         print(f"Info: Final dataset size ({len(balanced_df)}) matches the number of available examples within the ability scope ({len(working_df)}) as budget_n was larger.")
+
+
     return balanced_df
