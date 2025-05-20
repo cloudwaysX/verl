@@ -884,6 +884,7 @@ class RayPPOTrainer(object):
         sample_inputs = []
         sample_outputs = []
         sample_scores = []
+        token_lengths = []
 
         for test_data in self.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
@@ -942,6 +943,14 @@ class RayPPOTrainer(object):
             output_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in output_ids]
             sample_outputs.extend(output_texts)
 
+            # Calculate and store token lengths (before padding or special tokens removal)
+            batch_token_lengths = []
+            for ids in output_ids:
+                # Count non-padding tokens
+                token_length = (ids != self.tokenizer.pad_token_id).sum().item()
+                batch_token_lengths.append(token_length)
+            token_lengths.extend(batch_token_lengths)
+
             test_batch = test_batch.union(test_output_gen_batch)
 
             # evaluate using reward_function
@@ -961,21 +970,38 @@ class RayPPOTrainer(object):
 
         # evaluate test_score based on data source
         data_source_reward = {}
+        data_source_token_lengths = {}
+        
         for i in range(reward_tensor.shape[0]):
             data_source = data_sources[i]
             if data_source not in data_source_reward:
                 data_source_reward[data_source] = []
+                data_source_token_lengths[data_source] = []
+                
             data_source_reward[data_source].append(reward_tensor[i].item())
+            data_source_token_lengths[data_source].append(token_lengths[i])
 
         metric_dict = {}
         for data_source, rewards in data_source_reward.items():
-            if use_editval:
-                metric_dict[f'val_editval/test_score/{data_source}'] = np.mean(rewards)
-            elif use_longer_response:
-                metric_dict[f'val_longer_response/test_score/{data_source}'] = np.mean(rewards)
-            else:
-                metric_dict[f'val/test_score/{data_source}'] = np.mean(rewards)
-
+            prefix = 'val_editval/test_score' if use_editval else 'val_longer_response/test_score' if use_longer_response else 'val/test_score'
+            metric_dict[f'{prefix}/{data_source}'] = np.mean(rewards)
+            
+            # New: Add length metrics
+            length_prefix = 'val_editval/length' if use_editval else 'val_longer_response/length' if use_longer_response else 'val/length'
+            
+            # Token length metrics
+            token_lens = data_source_token_lengths[data_source]
+            metric_dict[f'{length_prefix}/tokens_mean/{data_source}'] = np.mean(token_lens)
+            metric_dict[f'{length_prefix}/tokens_median/{data_source}'] = np.median(token_lens)
+            metric_dict[f'{length_prefix}/tokens_max/{data_source}'] = np.max(token_lens)
+            
+            
+        # Add overall length metrics (across all data sources)
+        overall_prefix = 'val_editval/length' if use_editval else 'val_longer_response/length' if use_longer_response else 'val/length'
+        metric_dict[f'{overall_prefix}/tokens_mean/overall'] = np.mean(token_lengths)
+        metric_dict[f'{overall_prefix}/tokens_median/overall'] = np.median(token_lengths)
+        metric_dict[f'{overall_prefix}/tokens_max/overall'] = np.max(token_lengths)
+        
         return metric_dict
     
 
