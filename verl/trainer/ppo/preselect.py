@@ -168,7 +168,10 @@ def calculate_prompt_length(prompt_list):
         first_message = prompt_list[0]
         if isinstance(first_message, dict) and 'content' in first_message:
             return len(str(first_message['content'])) # Ensure it's a string
-    return 0
+    elif isinstance(prompt_list, str):
+        return len(prompt_list)
+    else:
+        raise ValueError("Unexpected structure for prompt_list. Expected a list of dictionaries or a string.")
 def select_prompts_by_highest_length(df, budget_n):
     """
     Selects a subset of a dataframe containing prompts with the highest lengths,
