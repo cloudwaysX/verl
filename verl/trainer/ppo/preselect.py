@@ -153,6 +153,56 @@ def balance_dataset_by_ability(df, budget_n, ability_scope=None, random_seed=42)
          print(f"Warning: Final dataset size ({len(balanced_df)}) does not match budget_n ({budget_n}). This can happen if some abilities within the scope had fewer examples than the target count per ability.")
     elif len(balanced_df) != len(working_df) and len(working_df) < budget_n:
          print(f"Info: Final dataset size ({len(balanced_df)}) matches the number of available examples within the ability scope ({len(working_df)}) as budget_n was larger.")
-
-
+    
     return balanced_df
+
+
+
+# Sort by length of prompt
+def calculate_prompt_length(prompt_list):
+    """
+    Calculates the length of the 'content' from the first user message
+    in a list of prompt dictionaries. Returns 0 for unexpected structures.
+    """
+    if isinstance(prompt_list, list) and len(prompt_list) > 0:
+        first_message = prompt_list[0]
+        if isinstance(first_message, dict) and 'content' in first_message:
+            return len(str(first_message['content'])) # Ensure it's a string
+    return 0
+def select_prompts_by_highest_length(df, budget_n):
+    """
+    Selects a subset of a dataframe containing prompts with the highest lengths,
+    up to a specified budget, by calculating length from the 'prompt' column
+    (more concise version).
+
+    Args:
+        df (pd.DataFrame): The input dataframe containing a column named 'prompt'
+                           with a structure like [{"role": "user", "content": "..."}].
+        budget_n (int): The maximum number of examples to select.
+
+    Returns:
+        pd.DataFrame: A filtered dataframe containing up to budget_n examples
+                      with the highest calculated prompt lengths.
+                      Returns all examples if budget_n is greater than the
+                      number of rows in the dataframe.
+        Raises:
+            ValueError: If the 'prompt' column does not exist in the dataframe.
+    """
+    if 'prompt' not in df.columns:
+        raise ValueError("The dataframe must contain a 'prompt' column to calculate length.")
+
+    if budget_n is None or budget_n >= len(df):
+        print(f"Budget ({budget_n}) is greater than or equal to the total number of examples ({len(df)}). Returning all examples.")
+        return df.copy()
+
+    # Calculate lengths and get the indices of the top N using nlargest
+    # This is a concise way to find the indices corresponding to the largest values
+    # after applying the length calculation.
+    top_n_indices = df['prompt'].apply(calculate_prompt_length).nlargest(budget_n).index
+
+    # Select the rows from the original dataframe using the collected indices
+    selected_df = df.loc[top_n_indices].copy()
+
+    print(f"Selected {len(selected_df)} examples with the highest calculated prompt lengths (up to budget of {budget_n}).")
+
+    return selected_df

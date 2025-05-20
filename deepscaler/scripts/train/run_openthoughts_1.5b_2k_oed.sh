@@ -12,7 +12,7 @@ MODEL_NAME="DeepSeek-R1-Distill-Qwen-1.5B"
 
 PROJECT_NAME='openthoughts'
 EMBEDMODEL_NAME='e5-mistral-7b-instruct'
-EXPERIMENT_NAME='1kdeepscaler-1.5b-2k_balanceabilityV3' 
+EXPERIMENT_NAME='1kdeepscaler-1.5b-2k_highlen' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
@@ -70,7 +70,6 @@ python3 -m verl.trainer.main_ppo \
     reward_model.edit_weight=0.0 \
     active_strategy.selection_metric=null \
     active_strategy.strategy_type=null \
-    active_strategy.oed="balance_by_ability" \
-    +active_strategy.topic_scope=["Logic and Puzzles","Combinatorics","Other"] \
+    active_strategy.oed="select_prompts_by_highest_length" \
     +data.embedding_path="/mnt/disk3/verl/embedding/openr1-math/${EMBEDMODEL_NAME}/embeddings.npy" \
     +active_strategy.coreset_idx_path="${HOME}/verl/results/openr1-math/${EMBEDMODEL_NAME}/oed_${MODEL_NAME}_\${data.max_prompt_length}"

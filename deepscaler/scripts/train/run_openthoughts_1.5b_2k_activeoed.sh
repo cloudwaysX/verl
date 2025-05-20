@@ -65,7 +65,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
-    trainer.total_epochs=300 "${@:1}"\
+    trainer.total_epochs=1000 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
     reward_model.edit_weight=0.0 \
     active_strategy.selection_metric=null \

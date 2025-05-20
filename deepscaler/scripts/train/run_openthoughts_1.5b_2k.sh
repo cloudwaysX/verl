@@ -10,12 +10,12 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 
 PROJECT_NAME='openthoughts'
-EXPERIMENT_NAME='1kdeepscaler-1.5b-2k' 
+EXPERIMENT_NAME='10kdeepscaler-1.5b-2k' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_ratio=0.0125 \
+    data.train_ratio=0.125 \
     +data.train_ratio_seed=42 \
     data.train_files=$HOME/data/openr1-math/train.parquet \
     data.val_files=[$HOME/data/aime/test.parquet,$HOME/data/amc/test.parquet,$HOME/data/math/test.parquet,$HOME/data/minerva/test.parquet] \

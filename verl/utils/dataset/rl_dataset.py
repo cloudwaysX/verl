@@ -31,6 +31,7 @@ from verl.trainer.ppo.preselect import selection_for_math_difficulty, selection_
 from verl.trainer.ppo.preselect import selection_for_deepscaler_difficulty
 from verl.trainer.ppo.preselect import selection_for_openthoughts_difficulty, balance_dataset_by_ability
 from verl.trainer.ppo.oed import coreset_selection, reverse_coreset_selection, redant_selection
+from verl.trainer.ppo.preselect import select_prompts_by_highest_length
 
 
 def collate_fn(data_list: list[dict]) -> dict:
@@ -213,6 +214,8 @@ class RLHFDataset(Dataset):
             self.dataframe = selection_for_deepscaler_difficulty(self.dataframe)
         elif oed in ["openthoughts_difficulty4"]:
             self.dataframe = selection_for_openthoughts_difficulty(self.dataframe)
+        elif oed in ["select_prompts_by_highest_length"]:
+            self.dataframe = select_prompts_by_highest_length(self.dataframe, size)
         elif oed in ["coreset"]:
             idxs = coreset_selection(embeddings, size, oed_save_path, train_ratio_seed)
             self.dataframe = self.dataframe.iloc[idxs]

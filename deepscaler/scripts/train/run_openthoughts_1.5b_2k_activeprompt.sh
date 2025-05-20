@@ -12,7 +12,7 @@ MODEL_NAME="DeepSeek-R1-Distill-Qwen-1.5B"
 
 PROJECT_NAME='openthoughts'
 EMBEDMODEL_NAME='e5-mistral-7b-instruct'
-EXPERIMENT_NAME='1kdeepscaler-1.5b-2k_fixordergreedy_clipratio0.5ANDvar' 
+EXPERIMENT_NAME='1kdeepscaler-1.5b-2k_fixorderexplore15' 
 
 # Train over a single node, 8 A100-80GB GPUs.
 python3 -m verl.trainer.main_ppo \
@@ -61,19 +61,19 @@ python3 -m verl.trainer.main_ppo \
     +trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
-    trainer.save_freq=100 \
+    trainer.save_freq=140 \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir="/mnt/disk3/verl/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}" \
     trainer.total_epochs=100 "${@:1}"\
     +reward_model.customized_reward_fn_name="deepscaler" \
     reward_model.edit_weight=0.0 \
-    active_strategy.selection_metric=null \
     active_strategy.strategy_type=null \
-    active_strategy.selection_metric="clipratio_and_variance" \
+    active_strategy.selection_metric="variance" \
     active_strategy.strategy_type="fixordergreedy" \
-    active_strategy.greedy_exploration_ratio=0.0\
+    active_strategy.greedy_exploration_ratio=0.15\
     +active_strategy.shufflefixorder=False \
     active_strategy.greedy_top_percent=0 \
     +active_strategy.size_threshold=0 \
-    active_strategy.score_threshold=[0.5,100] \
+    active_strategy.score_threshold=[-1,100] \
+    +active_strategy.resume_sampler=False
