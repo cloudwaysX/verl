@@ -986,21 +986,22 @@ class RayPPOTrainer(object):
             prefix = 'val_editval/test_score' if use_editval else 'val_longer_response/test_score' if use_longer_response else 'val/test_score'
             metric_dict[f'{prefix}/{data_source}'] = np.mean(rewards)
             
-            # New: Add length metrics
-            length_prefix = 'val_editval/length' if use_editval else 'val_longer_response/length' if use_longer_response else 'val/length'
+            if use_editval:
+                # New: Add length metrics
+                length_prefix = 'val_length' 
+                
+                # Token length metrics
+                token_lens = data_source_token_lengths[data_source]
+                metric_dict[f'{length_prefix}/tokens_mean/{data_source}'] = np.mean(token_lens)
+                metric_dict[f'{length_prefix}/tokens_median/{data_source}'] = np.median(token_lens)
+                metric_dict[f'{length_prefix}/tokens_max/{data_source}'] = np.max(token_lens)
             
-            # Token length metrics
-            token_lens = data_source_token_lengths[data_source]
-            metric_dict[f'{length_prefix}/tokens_mean/{data_source}'] = np.mean(token_lens)
-            metric_dict[f'{length_prefix}/tokens_median/{data_source}'] = np.median(token_lens)
-            metric_dict[f'{length_prefix}/tokens_max/{data_source}'] = np.max(token_lens)
             
-            
-        # Add overall length metrics (across all data sources)
-        overall_prefix = 'val_editval/length' if use_editval else 'val_longer_response/length' if use_longer_response else 'val/length'
-        metric_dict[f'{overall_prefix}/tokens_mean/overall'] = np.mean(token_lengths)
-        metric_dict[f'{overall_prefix}/tokens_median/overall'] = np.median(token_lengths)
-        metric_dict[f'{overall_prefix}/tokens_max/overall'] = np.max(token_lengths)
+        # # Add overall length metrics (across all data sources)
+        # overall_prefix = 'val_editval/length' if use_editval else 'val_longer_response/length' if use_longer_response else 'val/length'
+        # metric_dict[f'{overall_prefix}/tokens_mean/overall'] = np.mean(token_lengths)
+        # metric_dict[f'{overall_prefix}/tokens_median/overall'] = np.median(token_lengths)
+        # metric_dict[f'{overall_prefix}/tokens_max/overall'] = np.max(token_lengths)
         
         return metric_dict
     
