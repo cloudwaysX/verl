@@ -255,7 +255,7 @@ class RLHFDataset(Dataset):
             cache_file = os.path.join(oed_save_path, f'reindex_redant_selected_indices_{size}.json')
             with open(cache_file, 'w') as f:
                 json.dump(new_selected_idx, f)
-        elif oed in ["random", "random_continue1k"]:
+        elif "random" in oed:
             if train_ratio_seed is not None:
                 np.random.seed(train_ratio_seed)
                 self.dataframe = self.dataframe.sample(frac=1, random_state=train_ratio_seed).reset_index(drop=True)
@@ -265,8 +265,10 @@ class RLHFDataset(Dataset):
                 self.dataframe = self.dataframe[400 : 400 + size]
             elif oed == "random_continue100":
                 self.dataframe = self.dataframe[100 : 100 + size]
-            else:
+            elif oed == "random":
                 self.dataframe = self.dataframe.head(size)
+            else:
+                raise ValueError(f"Unsupported random oed: {oed}")
         elif oed is None:
             pass
         else:
