@@ -261,6 +261,10 @@ class RLHFDataset(Dataset):
                 self.dataframe = self.dataframe.sample(frac=1, random_state=train_ratio_seed).reset_index(drop=True)
             if oed == "random_continue1k":
                 self.dataframe = self.dataframe[1000 : 1000 + size] # compelete from select size from first 1 k
+            elif oed == "random_continue400":
+                self.dataframe = self.dataframe[400 : 400 + size]
+            elif oed == "random_continue100":
+                self.dataframe = self.dataframe[100 : 100 + size]
             else:
                 self.dataframe = self.dataframe.head(size)
         elif oed is None:
