@@ -201,7 +201,9 @@ class RLHFDataset(Dataset):
         # decide the training budget
         size = int(len(self.dataframe)*train_ratio)
             
-        if oed in ["balance_by_ability"]:
+        if oed is None:
+            pass
+        elif oed in ["balance_by_ability"]:
             self.dataframe = balance_dataset_by_ability(self.dataframe, 
                                                         size, 
                                                         ability_scope=topic_scope, 
@@ -269,8 +271,6 @@ class RLHFDataset(Dataset):
                 self.dataframe = self.dataframe.head(size)
             else:
                 raise ValueError(f"Unsupported random oed: {oed}")
-        elif oed is None:
-            pass
         else:
             raise ValueError(f"Unsupported oed: {oed}")
 
