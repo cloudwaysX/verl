@@ -267,6 +267,10 @@ class RLHFDataset(Dataset):
             #    self.dataframe = self.dataframe[400 : 400 + size]
             if oed == "random_continue1.7k":
                 self.dataframe = self.dataframe[1700 : 1700 + size]
+	    elif oed == "random_continue1.75k":
+                self.dataframe = self.dataframe[1750 : 1750 + size]
+            elif oed == "random_continue1.4k":
+                self.dataframe = self.dataframe[1400 : 1400 + size]
             elif oed == "random_continue1.6k":
                 self.dataframe = self.dataframe[1600 : 1600 + size]
             elif oed == "random":
