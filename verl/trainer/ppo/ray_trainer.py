@@ -1262,6 +1262,21 @@ class RayPPOTrainer(object):
                           experiment_name=self.config.trainer.experiment_name,
                           default_backend=self.config.trainer.logger,
                           config=OmegaConf.to_container(self.config, resolve=True))
+        # ─── LOG DATASET STATS TO WANDB ────────────────────────────────────────────
+        # grab your prompt‐length distribution from RLHFDataset.get_stats()
+        ds_stats = self.train_dataset.get_stats()
+        if ds_stats:
+            flat = {}
+            for k, v in ds_stats.items():
+                if isinstance(v, dict):
+                    # percentiles
+                    for subk, subv in v.items():
+                        flat[f"dataset/{k}_{subk}"] = subv
+                else:
+                    flat[f"dataset/{k}"] = v
+            # log at step 0 so it shows up in the “overview” panel
+            logger.log(data=flat, step=0)
+        # ──────────────────────────────────────────────────────────────────────────
 
         self.global_steps = 0
 
@@ -1293,7 +1308,7 @@ class RayPPOTrainer(object):
         all_topics = self.train_dataset.get_all_topics()
 
         # Add a random sampled subset of the training dataset and track their variance
-        num_tracked_samples = 200
+        num_tracked_samples = min(200, len(self.train_dataset.get_all_prompt_ids()))
         np.random.seed(42)
         self.tracked_samples_idx = np.random.choice(self.train_dataset.get_all_prompt_ids(), num_tracked_samples, replace=False)
 

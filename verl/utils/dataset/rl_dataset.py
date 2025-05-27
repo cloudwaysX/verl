@@ -326,6 +326,46 @@ class RLHFDataset(Dataset):
         return list(self.rawindex2rowindex.keys())
     def get_all_prompt_ids_inorder(self):
         return self.rowindex2rawindex
+    
+    def get_stats(self):
+        """
+        Compute length statistics (in tokens) over all prompts in the dataset.
+        Returns a dict with count, min/max, mean, median, std and some key percentiles.
+        """
+        import numpy as np
+
+        # 1) Compute token-length for each prompt
+        lengths = []
+        for chat in self.dataframe[self.prompt_key]:
+            # apply_chat_template returns the tokenized prompt when tokenize=True (default)
+            tokens = self.tokenizer.apply_chat_template(
+                chat, add_generation_prompt=True
+            )
+            lengths.append(len(tokens))
+
+        arr = np.array(lengths, dtype=int)
+        if arr.size == 0:
+            return {}
+
+        # 2) Build stats
+        stats = {
+            "num_samples": int(arr.size),
+            "min_length": int(arr.min()),
+            "max_length": int(arr.max()),
+            "mean_length": float(arr.mean()),
+            "median_length": float(np.median(arr)),
+            "std_length": float(arr.std(ddof=0)),
+            "percentiles": {
+                "p25": float(np.percentile(arr, 25)),
+                "p50": float(np.percentile(arr, 50)),
+                "p75": float(np.percentile(arr, 75)),
+                "p90": float(np.percentile(arr, 90)),
+                "p95": float(np.percentile(arr, 95)),
+            },
+        }
+
+        return stats
+
 
     def __getitem__(self, item):
         """
