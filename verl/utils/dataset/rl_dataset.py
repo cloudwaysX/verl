@@ -100,7 +100,8 @@ class RLHFDataset(Dataset):
                  embedding_path: str = None,
                  oed: Optional[str] = None,
                  topic_scope: Optional[str] = None,
-                 oed_save_path: Optional[str] = None):
+                 oed_save_path: Optional[str] = None,
+                 min_len: Optional[int] = None):
         """
         oed:
             balance_by_ability: balance the dataset by ability
@@ -130,6 +131,10 @@ class RLHFDataset(Dataset):
         self.truncation = truncation
 
         self.use_original_id = False
+
+        # if set, pretend the dataset has at least this many items,
+        # cycling through the real ones.
+        self.min_len = min_len
 
         # whether to store the dataset in state_dict()
         # default not store
@@ -292,7 +297,10 @@ class RLHFDataset(Dataset):
             print(r'old dataloader ckpt file is used, please train from scratch for better ckpt performance')
 
     def __len__(self):
-        return len(self.dataframe)
+        base = len(self.dataframe)
+        if self.min_len is not None and base < self.min_len:
+            return self.min_len
+        return base
     
     def _set_all_prompt_ids(self):
         # If 'extra_info' exists in the DataFrame, try to extract the 'index' from it.
@@ -375,7 +383,9 @@ class RLHFDataset(Dataset):
         """
         Note that we also return the raw_input_ids so that it can be combined with other chat template
         """
-        row_dict: dict = self.dataframe.iloc[item].to_dict()
+        # if we're in “repeat” mode, wrap the index
+        real_idx = item % len(self.dataframe) if (self.min_len and len(self.dataframe) < self.min_len) else item
+        row_dict: dict = self.dataframe.iloc[real_idx].to_dict()
 
         chat = row_dict.pop(self.prompt_key)
 
