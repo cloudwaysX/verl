@@ -1495,7 +1495,8 @@ class RayPPOTrainer(object):
                 metrics.update(self.compute_per_prompt_stats(batch, clip_persample))
                 
                 # For a subset of tracked prompts, we also track their outputs texts
-                self._maybe_log_train_generations_to_wandb(batch, epoch, end_of_epoch=batch_idx==len(self.train_dataloader)-1)
+                if self.config.trainer.track_texts:
+                    self._maybe_log_train_generations_to_wandb(batch, epoch, end_of_epoch=batch_idx==len(self.train_dataloader)-1)
                     
                 if batch_idx==len(self.train_dataloader)-1:
                     visit_counts = np.array(list(self.visit_counts.values()))
