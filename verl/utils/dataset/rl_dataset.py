@@ -265,10 +265,10 @@ class RLHFDataset(Dataset):
             #    self.dataframe = self.dataframe[1000 : 1000 + size] # compelete from select size from first 1 k
             # elif oed == "random_continue400":
             #    self.dataframe = self.dataframe[400 : 400 + size]
-            elif oed == "random_continue1.4k":
-                self.dataframe = self.dataframe[1400 : 1400 + size]
-            elif oed == "random_continue1.5k":
-                self.dataframe = self.dataframe[1500 : 1500 + size]
+            if oed == "random_continue1.7k":
+                self.dataframe = self.dataframe[1700 : 1700 + size]
+            elif oed == "random_continue1.6k":
+                self.dataframe = self.dataframe[1600 : 1600 + size]
             elif oed == "random":
                 self.dataframe = self.dataframe.head(size)
             else:
