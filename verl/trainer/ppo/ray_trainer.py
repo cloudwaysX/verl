@@ -591,7 +591,8 @@ class RayPPOTrainer(object):
                                          oed=self.config.active_strategy.oed,
                                          topic_scope=self.config.active_strategy.get("topic_scope", None),
                                          embedding_path=self.config.data.get("embedding_path", None),
-                                         oed_save_path=self.config.active_strategy.get("coreset_idx_path", oed_save_path))
+                                         oed_save_path=self.config.active_strategy.get("coreset_idx_path", oed_save_path),
+                                         min_len=self.config.data.train_batch_size)
         # use sampler for better ckpt resume
         if self.config.data.shuffle:
             train_dataloader_generator = torch.Generator()
