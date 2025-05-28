@@ -183,14 +183,15 @@ def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_re
                                                                         index=index,
                                                                         return_std=return_std)
         if return_std:
-            advantages, rewards_std, rewards_mean, edit2correct_counts = \
-                advantages["advantages"], advantages["rewards_std"], advantages["rewards_mean"], advantages["edit2correct_counts"]
+            advantages, rewards_std, rewards_mean, edit2correct_counts, len_std = \
+                advantages["advantages"], advantages["rewards_std"], advantages["rewards_mean"], advantages["edit2correct_counts"], advantages["len_std"]
         data.batch['advantages'] = advantages
         data.batch['returns'] = returns
         if return_std:
             data.batch['rewards_std'] = rewards_std
             data.batch['rewards_mean'] = rewards_mean
             data.batch['edit2correct_counts'] = edit2correct_counts
+            data.batch['len_std'] = len_std
     elif adv_estimator == AdvantageEstimator.REINFORCE_PLUS_PLUS:
         assert not return_std, 'return_std is not supported in REINFORCE_PLUS_PLUS'
         token_level_rewards = data.batch['token_level_rewards']
@@ -298,6 +299,7 @@ def compute_data_metrics(batch, use_critic=True):
     response_info = _compute_response_info(batch)
     prompt_length = response_info['prompt_length']
     response_length = response_info['response_length']
+    response_length_std = batch.batch['len_std'] if 'len_std' in batch.batch else None
 
     valid_adv = torch.masked_select(advantages, response_mask)
     valid_returns = torch.masked_select(returns, response_mask)
@@ -364,6 +366,15 @@ def compute_data_metrics(batch, use_critic=True):
             torch.min(prompt_length).detach().item(),
         'prompt_length/clip_ratio':
             torch.mean(torch.eq(prompt_length, max_prompt_length).float()).detach().item(),
+        # response length std
+        'response_length_std/mean':
+            torch.mean(response_length_std).detach().item() if response_length_std is not None else 0.0,
+        'response_length_std/max':
+            torch.max(response_length_std).detach().item() if response_length_std is not None else 0.0,
+        'response_length_std/min':
+            torch.min(response_length_std).detach().item() if response_length_std is not None else 0.0,
+        'response_length_std/median':
+            torch.median(response_length_std).detach().item() if response_length_std is not None else 0.0,
     }
     
     # record the clip per prompt
@@ -436,7 +447,7 @@ class RayPPOTrainer(object):
         assert self.hybrid_engine, 'Currently, only support hybrid engine'
 
         if self.hybrid_engine:
-            assert Role.ActorRollout in role_worker_mapping, f'{role_worker_mapping.keys()=}'
+            assert Role.ActorRollout in role_worker_mapping, f'{role_worker_mapping.keys()}'
 
         self.role_worker_mapping = role_worker_mapping
         self.resource_pool_manager = resource_pool_manager
