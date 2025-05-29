@@ -340,42 +340,58 @@ class RLHFDataset(Dataset):
         return self.rowindex2rawindex
     
     def get_stats(self):
-        """
-        Compute length statistics (in tokens) over all prompts in the dataset.
-        Returns a dict with count, min/max, mean, median, std and some key percentiles.
-        """
         import numpy as np
 
-        # 1) Compute token-length for each prompt
+        # 1) Compute token‐length for each prompt
         lengths = []
         for chat in self.dataframe[self.prompt_key]:
-            # apply_chat_template returns the tokenized prompt when tokenize=True (default)
             tokens = self.tokenizer.apply_chat_template(
                 chat, add_generation_prompt=True
             )
             lengths.append(len(tokens))
+        length_arr = np.array(lengths, dtype=int)
 
-        arr = np.array(lengths, dtype=int)
-        if arr.size == 0:
-            return {}
-
-        # 2) Build stats
         stats = {
-            "num_samples": int(arr.size),
-            "min_length": int(arr.min()),
-            "max_length": int(arr.max()),
-            "mean_length": float(arr.mean()),
-            "median_length": float(np.median(arr)),
-            "std_length": float(arr.std(ddof=0)),
+            "num_samples": int(length_arr.size),
+            "min_length": int(length_arr.min()) if length_arr.size else 0,
+            "max_length": int(length_arr.max()) if length_arr.size else 0,
+            "mean_length": float(length_arr.mean()) if length_arr.size else 0.0,
+            "median_length": float(np.median(length_arr)) if length_arr.size else 0.0,
+            "std_length": float(length_arr.std(ddof=0)) if length_arr.size else 0.0,
             "percentiles": {
-                "p25": float(np.percentile(arr, 25)),
-                "p50": float(np.percentile(arr, 50)),
-                "p75": float(np.percentile(arr, 75)),
-                "p90": float(np.percentile(arr, 90)),
-                "p95": float(np.percentile(arr, 95)),
+                "p25": float(np.percentile(length_arr, 25)) if length_arr.size else 0.0,
+                "p50": float(np.percentile(length_arr, 50)) if length_arr.size else 0.0,
+                "p75": float(np.percentile(length_arr, 75)) if length_arr.size else 0.0,
+                "p90": float(np.percentile(length_arr, 90)) if length_arr.size else 0.0,
+                "p95": float(np.percentile(length_arr, 95)) if length_arr.size else 0.0,
             },
         }
 
+        # 2) Compute difficulty stats if available
+        if "extra_info" in self.dataframe.columns:
+            # pull out all numeric difficulties
+            diffs = [
+                info.get("difficulty")
+                for info in self.dataframe["extra_info"]
+                if isinstance(info, dict) and "difficulty" in info
+            ]
+            if diffs:
+                diff_arr = np.array(diffs, dtype=float)
+                stats["difficulty_stats"] = {
+                    "num_samples": int(diff_arr.size),
+                    "min": float(diff_arr.min()),
+                    "max": float(diff_arr.max()),
+                    "mean": float(diff_arr.mean()),
+                    "median": float(np.median(diff_arr)),
+                    "std": float(diff_arr.std(ddof=0)),
+                    "percentiles": {
+                        "p25": float(np.percentile(diff_arr, 25)),
+                        "p50": float(np.percentile(diff_arr, 50)),
+                        "p75": float(np.percentile(diff_arr, 75)),
+                        "p90": float(np.percentile(diff_arr, 90)),
+                        "p95": float(np.percentile(diff_arr, 95)),
+                    },
+                }
         return stats
 
 
