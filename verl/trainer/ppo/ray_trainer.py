@@ -489,8 +489,10 @@ class RayPPOTrainer(object):
         # Track latest stats for each unique prompt
         self.return_rewards_std = True
         self.prev_variances = {}
+        self.moving_avg_variances = {} # Store the moving average of variances for each unique samples
         self.visit_counts = {} # Store the number of visits for each unique samples
         self.latest_reward_mean = {} # Store the latest reward mean for each unique samples
+        self.moving_avg_variances = {} # Store the moving average of variances for each unique samples
         self.latest_clippedans_mean = {} # Store the latest clipped answer mean for each unique samples
         self.latest_edit2correct_counts = {} # Store the latest edit2correct counts for each unique samples
         self.latest_edit2correct_mean = {} # Store the latest edit2correct mean for each unique samples
@@ -802,7 +804,7 @@ class RayPPOTrainer(object):
         self.validation_table = new_table
         
         
-    def compute_per_prompt_stats(self, batch, clip_persample):
+    def compute_per_prompt_stats(self, batch, clip_persample, epoch):
         # Keep track of the stats chanege of all the prompts.
         batch_indices = np.array(batch.non_tensor_batch['index'], dtype=object)
         # Get unique indices and their first occurrence indices.
@@ -828,6 +830,7 @@ class RayPPOTrainer(object):
             # track the reward mean
             rewardmean_est_error += np.absolute(batch.batch['rewards_mean'][i].item()-self.latest_reward_mean[unique_id])/len(unique_ids)
             self.latest_reward_mean[unique_id] = batch.batch['rewards_mean'][i].item()
+            self.moving_avg_variances[unique_id] = (self.moving_avg_variances.get(unique_id, 0) * epoch + batch.batch['rewards_mean'][i].item())/ (epoch + 1)
             self.latest_edit2correct_counts[unique_id] = batch.batch['edit2correct_counts'][i].item()
             total_rewardmean += np.absolute(self.latest_reward_mean[unique_id])/len(unique_ids)
          
@@ -1504,7 +1507,7 @@ class RayPPOTrainer(object):
                 metrics.update(compute_difficulty_metrics(batch=batch))
                 metrics.update(compute_subtopic_metrics(batch=batch, all_topics=all_topics))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
-                metrics.update(self.compute_per_prompt_stats(batch, clip_persample))
+                metrics.update(self.compute_per_prompt_stats(batch, clip_persample, epoch))
                 
                 # For a subset of tracked prompts, we also track their outputs texts
                 if self.config.trainer.track_texts:
