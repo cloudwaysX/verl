@@ -135,7 +135,7 @@ def compute_grpo_outcome_advantage(token_level_rewards: torch.Tensor,
     edit2correct_per_sample = torch.zeros_like(scores)
 
     id2score = defaultdict(list)
-    id2len = defaultdict(int)
+    id2len = defaultdict(list)
     id2mean = {}
     id2std = {}
     id2count_edit2correct = {} # This is used to compute the average number of edits to get the correct response
